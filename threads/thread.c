@@ -63,6 +63,15 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
+// Project 1. Alarm clock 프로토타입
+// static struct list blocked_list;
+void thread_sleep(int64_t ticks);
+void thread_awake(int64_t ticks);
+void update_next_tick_to_awake(int64_t ticks);
+int64_t get_next_tick_to_awake(void);
+static struct list blocked_list;
+
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -109,6 +118,9 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+
+	// Project 1. Alarm Clock
+	list_init(&blocked_list);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -292,7 +304,7 @@ thread_exit (void) {
 	NOT_REACHED ();
 }
 
-/* Yields the CPU.  The current thread is not put to sleep and
+/* Yields the CPU.  The current thread is not put to  and
    may be scheduled again immediately at the scheduler's whim. */
 void
 thread_yield (void) {
@@ -587,4 +599,50 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+
+// Project 1. Alarm clock
+void thread_sleep(int64_t ticks){
+	struct thread *cur;
+	enum intr_level old_level;
+	cur = thread_current();
+	ASSERT(is_thread(cur));
+	ASSERT(cur->status == THREAD_RUNNING);
+
+	old_level = intr_disable();
+
+	ASSERT(cur != idle_thread);
+	// 일어날 시간을 저장
+	cur->wakeup_time = ticks;
+	printf("%d번째 쓰레드가 일어날 시간은 %d입니다\n", cur->tid, ticks);
+	list_push_back (&blocked_list, &cur->elem);
+	thread_block();
+
+	intr_set_level(old_level);
+}
+
+// 블락큐에서 스레드 깨우기
+void thread_awake(int64_t ticks){
+	struct list_elem *i = list_begin(&blocked_list);
+
+	while (i != list_end(&blocked_list)){
+		struct thread *find_thread = list_entry(i, struct thread, elem);
+		if (find_thread -> wakeup_time <= ticks){
+			i = list_remove(i);
+			thread_unblock(find_thread);
+			printf("%d번째 쓰레드를 깨웠다!\n", find_thread->tid);
+		}
+		else{
+			i = list_next(i);
+		}
+	}
+	// for (i; i != list_end(&blocked_list); i = list_next (i)){
+	// 	struct thread *find_thread = list_entry(i, struct thread, elem);
+	// 	if (find_thread->wakeup_time <= ticks){
+	// 		i = list_remove(i);
+	// 		thread_unblock(find_thread);
+	// 		printf("%d번째 쓰레드를 깨웠다!\n", find_thread->tid);
+	// 	}
+	// }
 }
