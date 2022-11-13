@@ -28,6 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+static struct list sleep_list;
+int64_t next_tick_to_awake;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,7 +111,8 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
-	list_init (&destruction_req);
+	list_init(&sleep_list);
+	list_init(&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -587,4 +591,56 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+
+void thread_sleep(int64_t ticks){
+	struct thread *curr = thread_current ();
+	enum intr_level old_level;
+
+	ASSERT(is_thread(curr));
+	ASSERT(curr != idle_thread);
+	old_level = intr_disable();
+
+	curr->wakeup_tick = ticks;
+	list_push_back(&sleep_list, &curr->elem);
+
+	thread_block();
+	update_next_tick_to_awake(ticks);
+
+	intr_set_level (old_level);
+}
+
+void thread_awake(int64_t ticks){
+	struct list_elem *list_elem;
+	struct thread *thread;
+	int64_t next_ticks = ticks;
+
+	if (!list_empty(&sleep_list)){
+		list_elem = list_begin(&sleep_list);
+		while (list_elem != list_end(&sleep_list)){
+			thread = list_entry(list_elem, struct thread, elem);
+			if (thread->wakeup_tick <= ticks){
+				list_elem = list_remove(list_elem);
+				thread_unblock(thread);
+				continue;
+			}
+			else{
+				if (next_ticks == ticks)
+					next_ticks = thread->wakeup_tick;
+				else if(next_ticks > thread->wakeup_tick)
+					next_ticks = thread->wakeup_tick;
+			}
+			list_elem = list_next(list_elem);
+		}
+		update_next_tick_to_awake(next_ticks);
+	}
+}
+
+void update_next_tick_to_awake(int64_t ticks){
+	next_tick_to_awake = ticks;
+}
+
+int64_t get_next_tick_to_awake(void){
+	return next_tick_to_awake;
 }
