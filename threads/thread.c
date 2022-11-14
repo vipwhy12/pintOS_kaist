@@ -321,7 +321,22 @@ thread_set_priority (int new_priority) {
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+	int max_priority = PRI_MIN;
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	struct list_elem *list_elem = list_begin(&ready_list);
+	struct thread *thread;
+	while (list_elem != list_end(&ready_list)){
+		thread = list_entry(list_elem, struct thread, elem);
+		if (thread->priority > max_priority)
+			max_priority = thread->priority;
+		list_elem = list_next(list_elem);
+	}
+
+	intr_set_level (old_level);
+	return max_priority;
+	// return thread_current ()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -415,6 +430,22 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 }
 
+static struct thread* pop_max_priority_thread(void){
+	struct list_elem *list_elem;
+	struct thread *thread;
+	int target_priority = thread_get_priority();
+
+	list_elem = list_begin(&ready_list);
+	while (list_elem != list_end(&ready_list)){
+		thread = list_entry(list_elem, struct thread, elem);
+		if (thread ->priority == target_priority){
+			list_remove(list_elem);
+			return thread;
+		}
+		list_elem = list_next(list_elem);
+	}
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -425,7 +456,8 @@ next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+		return pop_max_priority_thread();
+	// return list_entry(list_pop_front(&ready_list), struct thread, elem);
 }
 
 /* Use iretq to launch the thread */
@@ -593,7 +625,6 @@ allocate_tid (void) {
 	return tid;
 }
 
-
 void thread_sleep(int64_t ticks){
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
@@ -614,7 +645,7 @@ void thread_sleep(int64_t ticks){
 void thread_awake(int64_t ticks){
 	struct list_elem *list_elem;
 	struct thread *thread;
-	int64_t next_ticks = ticks;
+	int64_t next_ticks = NULL;
 
 	if (!list_empty(&sleep_list)){
 		list_elem = list_begin(&sleep_list);
@@ -625,12 +656,9 @@ void thread_awake(int64_t ticks){
 				thread_unblock(thread);
 				continue;
 			}
-			else{
-				if (next_ticks == ticks)
-					next_ticks = thread->wakeup_tick;
-				else if(next_ticks > thread->wakeup_tick)
-					next_ticks = thread->wakeup_tick;
-			}
+			else if (next_ticks == NULL || next_ticks > thread->wakeup_tick)
+				next_ticks = thread->wakeup_tick;
+			
 			list_elem = list_next(list_elem);
 		}
 		update_next_tick_to_awake(next_ticks);
