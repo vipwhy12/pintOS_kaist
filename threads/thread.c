@@ -28,6 +28,9 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+static struct list sleep_list;
+int64_t next_tick_to_awake;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -117,7 +120,8 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
-	list_init (&destruction_req);
+	list_init(&sleep_list);
+	list_init(&destruction_req);
 
 	// Project 1. Alarm Clock
 	list_init(&blocked_list);
@@ -329,7 +333,22 @@ thread_set_priority (int new_priority) {
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-	return thread_current ()->priority;
+	int max_priority = PRI_MIN;
+	enum intr_level old_level;
+	old_level = intr_disable();
+
+	struct list_elem *list_elem = list_begin(&ready_list);
+	struct thread *thread;
+	while (list_elem != list_end(&ready_list)){
+		thread = list_entry(list_elem, struct thread, elem);
+		if (thread->priority > max_priority)
+			max_priority = thread->priority;
+		list_elem = list_next(list_elem);
+	}
+
+	intr_set_level (old_level);
+	return max_priority;
+	// return thread_current ()->priority;
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -423,6 +442,22 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 }
 
+static struct thread* pop_max_priority_thread(void){
+	struct list_elem *list_elem;
+	struct thread *thread;
+	int target_priority = thread_get_priority();
+
+	list_elem = list_begin(&ready_list);
+	while (list_elem != list_end(&ready_list)){
+		thread = list_entry(list_elem, struct thread, elem);
+		if (thread ->priority == target_priority){
+			list_remove(list_elem);
+			return thread;
+		}
+		list_elem = list_next(list_elem);
+	}
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -433,7 +468,8 @@ next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else
-		return list_entry (list_pop_front (&ready_list), struct thread, elem);
+		return pop_max_priority_thread();
+	// return list_entry(list_pop_front(&ready_list), struct thread, elem);
 }
 
 /* Use iretq to launch the thread */
@@ -601,48 +637,50 @@ allocate_tid (void) {
 	return tid;
 }
 
-
-// Project 1. Alarm clock
 void thread_sleep(int64_t ticks){
-	struct thread *cur;
+	struct thread *curr = thread_current ();
 	enum intr_level old_level;
-	cur = thread_current();
-	ASSERT(is_thread(cur));
-	ASSERT(cur->status == THREAD_RUNNING);
 
+	ASSERT(is_thread(curr));
+	ASSERT(curr != idle_thread);
 	old_level = intr_disable();
 
-	ASSERT(cur != idle_thread);
-	// 일어날 시간을 저장
-	cur->wakeup_time = ticks;
-	printf("%d번째 쓰레드가 일어날 시간은 %d입니다\n", cur->tid, ticks);
-	list_push_back (&blocked_list, &cur->elem);
-	thread_block();
+	curr->wakeup_tick = ticks;
+	list_push_back(&sleep_list, &curr->elem);
 
-	intr_set_level(old_level);
+	thread_block();
+	update_next_tick_to_awake(ticks);
+
+	intr_set_level (old_level);
 }
 
-// 블락큐에서 스레드 깨우기
 void thread_awake(int64_t ticks){
-	struct list_elem *i = list_begin(&blocked_list);
+	struct list_elem *list_elem;
+	struct thread *thread;
+	int64_t next_ticks = NULL;
 
-	while (i != list_end(&blocked_list)){
-		struct thread *find_thread = list_entry(i, struct thread, elem);
-		if (find_thread -> wakeup_time <= ticks){
-			i = list_remove(i);
-			thread_unblock(find_thread);
-			printf("%d번째 쓰레드를 깨웠다!\n", find_thread->tid);
+	if (!list_empty(&sleep_list)){
+		list_elem = list_begin(&sleep_list);
+		while (list_elem != list_end(&sleep_list)){
+			thread = list_entry(list_elem, struct thread, elem);
+			if (thread->wakeup_tick <= ticks){
+				list_elem = list_remove(list_elem);
+				thread_unblock(thread);
+				continue;
+			}
+			else if (next_ticks == NULL || next_ticks > thread->wakeup_tick)
+				next_ticks = thread->wakeup_tick;
+			
+			list_elem = list_next(list_elem);
 		}
-		else{
-			i = list_next(i);
-		}
+		update_next_tick_to_awake(next_ticks);
 	}
-	// for (i; i != list_end(&blocked_list); i = list_next (i)){
-	// 	struct thread *find_thread = list_entry(i, struct thread, elem);
-	// 	if (find_thread->wakeup_time <= ticks){
-	// 		i = list_remove(i);
-	// 		thread_unblock(find_thread);
-	// 		printf("%d번째 쓰레드를 깨웠다!\n", find_thread->tid);
-	// 	}
-	// }
+}
+
+void update_next_tick_to_awake(int64_t ticks){
+	next_tick_to_awake = ticks;
+}
+
+int64_t get_next_tick_to_awake(void){
+	return next_tick_to_awake;
 }

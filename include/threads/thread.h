@@ -91,6 +91,7 @@ struct thread {
 	enum thread_status status;          /* Thread state. 4가지 : ready, blocked, running, dying*/
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
+	int64_t wakeup_tick;
 
 	int64_t wakeup_time;				// 일어나야할 시간
 	/* Shared between thread.c and synch.c. */
@@ -144,8 +145,9 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
-// Project1. Alarm Clock
 void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
+void update_next_tick_to_awake(int64_t ticks);
+int64_t get_next_tick_to_awake(void);
 
 #endif /* threads/thread.h */
