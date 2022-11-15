@@ -128,8 +128,7 @@ main (void) {
 }
 
 /* Clear BSS */
-static void
-bss_init (void) {
+static void bss_init (void) {
 	/* The "BSS" is a segment that should be initialized to zeros.
 	   It isn't actually stored on disk or zeroed by the kernel
 	   loader, so we have to zero it ourselves.

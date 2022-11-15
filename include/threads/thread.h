@@ -88,12 +88,13 @@ typedef int tid_t;
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
+	enum thread_status status;          /* Thread state. 4가지 : ready, blocked, running, dying*/
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 	int original_priority;
 	int64_t wakeup_tick;
 
+	int64_t wakeup_time;				// 일어나야할 시간
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 

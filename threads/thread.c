@@ -189,6 +189,7 @@ thread_create (const char *name, int priority,
 
 	ASSERT (function != NULL);
 	
+	
 	/* Allocate thread. */
 	t = palloc_get_page (PAL_ZERO);
 	if (t == NULL)
@@ -244,13 +245,15 @@ thread_unblock (struct thread *t) {
 
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
-	list_push_back (&ready_list, &t->elem);
-	t->status = THREAD_READY;
-	intr_set_level(old_level);
 
-	if (t != initial_thread && t->priority > thread_current() ->priority)
+	thread_insert_priority(&ready_list, t);
+
+	t->status = THREAD_READY;
+
+	if (!(intr_context()) &&  t->priority > thread_current()->priority)
 		thread_yield();
-	
+
+	intr_set_level(old_level);
 }
 
 /* Returns the name of the running thread. */
@@ -311,42 +314,25 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		list_push_back (&ready_list, &curr->elem);
-	do_schedule (THREAD_READY);
+		// list_push_back (&ready_list, &curr->elem);
+		thread_insert_priority(&ready_list, curr);
+	do_schedule(THREAD_READY);
 	intr_set_level (old_level);
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void
 thread_set_priority (int new_priority) {
-	enum intr_level old_level;
-	old_level = intr_disable();
 	int tmp = thread_current()->priority;
 	thread_current()->priority = new_priority;
-	intr_set_level(old_level);
-	if (thread_current()->priority < tmp)
+
+	if (!(intr_context()) && thread_current()->priority < tmp)
 		thread_yield();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
-
-	// enum intr_level old_level;
-	// old_level = intr_disable();
-	// int max_priority = PRI_MIN;
-	// if (!list_empty(&ready_list)){
-	// 	struct list_elem *list_elem = list_begin(&ready_list);
-	// 	struct thread *thread;
-	// 	while (list_elem != list_end(&ready_list)){
-	// 		thread = list_entry(list_elem, struct thread, elem);
-	// 		if (thread->priority > max_priority)
-	// 			max_priority = thread->priority;
-	// 		list_elem = list_next(list_elem);
-	// 	}
-	// }
-	// intr_set_level (old_level);
-	// return max_priority;
 	return thread_current ()->priority;
 }
 
@@ -441,35 +427,6 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 }
 
-static struct thread* pop_max_priority_thread(void){
-	
-	struct list_elem *list_elem;
-	struct thread *thread;
-
-	enum intr_level old_level;
-	old_level = intr_disable();
-	
-	int max_priority = PRI_MIN;
-	struct list_elem *max_priority_list_elem;
-	struct thread *max_priority_thread;
-
-	list_elem = list_begin(&ready_list);
-	while (list_elem != list_end(&ready_list)){
-		thread = list_entry(list_elem, struct thread, elem);
-		if (thread ->priority >= max_priority){
-			max_priority = thread->priority;
-			max_priority_thread = thread;
-			max_priority_list_elem = list_elem;
-		}
-		list_elem = list_next(list_elem);
-	}
-	
-	list_remove(max_priority_list_elem);
-	intr_set_level(old_level);
-
-	return max_priority_thread;
-}
-
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -480,8 +437,8 @@ next_thread_to_run (void) {
 	if (list_empty (&ready_list))
 		return idle_thread;
 	else
-		return pop_max_priority_thread();
-		// return  list_entry(list_pop_front(&ready_list), struct thread, elem);
+		return  list_entry(list_pop_front(&ready_list), struct thread, elem);
+		
 }
 
 /* Use iretq to launch the thread */
@@ -696,4 +653,24 @@ void update_next_tick_to_awake(int64_t ticks){
 
 int64_t get_next_tick_to_awake(void){
 	return next_tick_to_awake;
+}
+
+void thread_insert_priority(struct list *list, struct thread *curr){
+
+	struct list_elem *list_elem = list_begin(list);
+		struct thread *thread;
+		char flag = 0;
+		for (list_elem; list_elem != list_end(list); list_elem = list_next(list_elem))
+		{
+			thread = list_entry(list_elem, struct thread, elem);
+			if (curr->priority > thread->priority){
+				list_insert(list_elem, &curr->elem);
+				flag = 1;
+				break;
+			}
+			else
+				continue;
+		}
+		if (flag == 0) list_push_back(list, &curr->elem);
+
 }
