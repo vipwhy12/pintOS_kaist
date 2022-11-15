@@ -308,6 +308,7 @@ thread_exit (void) {
    may be scheduled again immediately at the scheduler's whim. */
 void
 thread_yield (void) {
+
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
 
@@ -686,4 +687,31 @@ void thread_insert_priority(struct list *list, struct thread *curr){
 		}
 		if (flag == 0) list_push_back(list, &curr->elem);
 
+}
+
+struct list_elem *pop_max_priority_thread(struct list *list){
+	struct list_elem *list_elem = list_begin(list);
+	struct thread *thread;
+	struct list_elem *target_list_elem;
+	int max_p = -1;
+	while (list_elem != list_end(list))
+	{
+		thread = list_entry(list_elem, struct thread, elem);
+		if (thread->priority > max_p){
+			max_p = thread->priority;
+			target_list_elem = list_elem;
+		}
+		list_elem = list_next(list_elem);
+	}
+	list_remove(target_list_elem);
+	return target_list_elem;
+}
+
+char is_readylist_empty(void){
+	return !list_empty(&ready_list) ? 0 : 1;
+}
+
+int get_ready_list_max_priority(){
+	struct thread *thread = list_entry(list_begin(&ready_list), struct thread, elem);
+	return thread->priority;
 }

@@ -109,9 +109,18 @@ sema_up (struct semaphore *sema) {
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+
+	
+	if (!list_empty (&sema->waiters)){
+		thread_unblock(list_entry(pop_max_priority_thread(&sema->waiters), struct thread, elem));
+	}
 	sema->value++;
-	if (!list_empty (&sema->waiters))
-		thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+
+	if(!is_readylist_empty()){
+		if (thread_current()->priority < get_ready_list_max_priority())
+			thread_yield();
+	} 
+
 	intr_set_level (old_level);
 }
 
@@ -289,7 +298,10 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	struct list_elem *l = &waiter.elem;
+	struct thread *t = list_entry(l, struct thread, elem);
+	thread_insert_priority(&cond->waiters, t);
+	// list_push_back(&cond->waiters, t);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);

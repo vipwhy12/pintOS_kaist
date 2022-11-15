@@ -139,6 +139,7 @@ void thread_yield (void);
 int thread_get_priority (void);
 void thread_set_priority (int);
 void thread_insert_priority(struct list *, struct thread *);
+struct list_elem * pop_max_priority_thread(struct list *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -151,7 +152,9 @@ void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
 void update_next_tick_to_awake(int64_t ticks);
 int64_t get_next_tick_to_awake(void);
+int get_ready_list_max_priority(void);
 
 void test_max_priority(void);
 
+char is_readylist_empty(void);
 #endif /* threads/thread.h */
