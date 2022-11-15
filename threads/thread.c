@@ -212,6 +212,10 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+
+	if (!(intr_context()) && priority > thread_get_priority()){
+		thread_yield();
+	}
 	return tid;
 }
 
@@ -249,9 +253,6 @@ thread_unblock (struct thread *t) {
 	thread_insert_priority(&ready_list, t);
 
 	t->status = THREAD_READY;
-
-	if (!(intr_context()) &&  t->priority > thread_current()->priority)
-		thread_yield();
 
 	intr_set_level(old_level);
 }
@@ -325,16 +326,26 @@ void
 thread_set_priority (int new_priority) {
 	int tmp = thread_current()->priority;
 	thread_current()->priority = new_priority;
-	thread_current()->original_priority = new_priority;
 
-	if (!(intr_context()) && thread_current()->priority < tmp)
-		thread_yield();
+	test_max_priority();
 }
 
 /* Returns the current thread's priority. */
 int
 thread_get_priority (void) {
 	return thread_current ()->priority;
+}
+
+void
+test_max_priority(void){
+	if (!list_empty(&ready_list)){
+		struct list_elem *list_elem = list_begin(&ready_list);
+		struct thread *thread = list_entry(list_elem, struct thread, elem);
+		if (thread->priority > thread_current()->priority){
+			if (!intr_context())
+				thread_yield();
+		}
+	}
 }
 
 /* Sets the current thread's nice value to NICE. */

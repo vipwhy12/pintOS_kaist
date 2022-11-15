@@ -4,6 +4,7 @@
         "synch.h": "c",
         "syscall.h": "c",
         "thread.h": "c",
-        "*.inc": "c"
+        "*.inc": "c",
+        "interrupt.h": "c"
     }
 }

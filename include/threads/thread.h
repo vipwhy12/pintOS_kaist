@@ -93,10 +93,10 @@ struct thread {
 	int priority;                       /* Priority. */
 	int original_priority;
 	int64_t wakeup_tick;
-
-	int64_t wakeup_time;				// 일어나야할 시간
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+
+	struct list wait_on_lock;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -138,6 +138,7 @@ void thread_yield (void);
 
 int thread_get_priority (void);
 void thread_set_priority (int);
+void thread_insert_priority(struct list *, struct thread *);
 
 int thread_get_nice (void);
 void thread_set_nice (int);
@@ -150,5 +151,7 @@ void thread_sleep(int64_t ticks);
 void thread_awake(int64_t ticks);
 void update_next_tick_to_awake(int64_t ticks);
 int64_t get_next_tick_to_awake(void);
+
+void test_max_priority(void);
 
 #endif /* threads/thread.h */
