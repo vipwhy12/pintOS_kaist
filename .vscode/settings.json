@@ -5,6 +5,7 @@
         "syscall.h": "c",
         "thread.h": "c",
         "*.inc": "c",
-        "interrupt.h": "c"
+        "interrupt.h": "c",
+        "debug.h": "c"
     }
 }

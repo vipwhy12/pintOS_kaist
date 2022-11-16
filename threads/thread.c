@@ -65,7 +65,6 @@ static void init_thread (struct thread *, const char *name, int priority);
 static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
-
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -250,7 +249,8 @@ thread_unblock (struct thread *t) {
 	old_level = intr_disable ();
 	ASSERT (t->status == THREAD_BLOCKED);
 
-	thread_insert_priority(&ready_list, t);
+	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
+	// thread_insert_priority(&ready_list, t);
 
 	t->status = THREAD_READY;
 
@@ -317,7 +317,7 @@ thread_yield (void) {
 	old_level = intr_disable ();
 	if (curr != idle_thread)
 		// list_push_back (&ready_list, &curr->elem);
-		thread_insert_priority(&ready_list, curr);
+		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
 	do_schedule(THREAD_READY);
 	intr_set_level (old_level);
 }
@@ -669,44 +669,6 @@ int64_t get_next_tick_to_awake(void){
 	return next_tick_to_awake;
 }
 
-void thread_insert_priority(struct list *list, struct thread *curr){
-
-	struct list_elem *list_elem = list_begin(list);
-		struct thread *thread;
-		char flag = 0;
-		for (list_elem; list_elem != list_end(list); list_elem = list_next(list_elem))
-		{
-			thread = list_entry(list_elem, struct thread, elem);
-			if (curr->priority > thread->priority){
-				list_insert(list_elem, &curr->elem);
-				flag = 1;
-				break;
-			}
-			else
-				continue;
-		}
-		if (flag == 0) list_push_back(list, &curr->elem);
-
-}
-
-struct list_elem *pop_max_priority_thread(struct list *list){
-	struct list_elem *list_elem = list_begin(list);
-	struct thread *thread;
-	struct list_elem *target_list_elem;
-	int max_p = -1;
-	while (list_elem != list_end(list))
-	{
-		thread = list_entry(list_elem, struct thread, elem);
-		if (thread->priority > max_p){
-			max_p = thread->priority;
-			target_list_elem = list_elem;
-		}
-		list_elem = list_next(list_elem);
-	}
-	list_remove(target_list_elem);
-	return target_list_elem;
-}
-
 char is_readylist_empty(void){
 	return !list_empty(&ready_list) ? 0 : 1;
 }
@@ -714,4 +676,14 @@ char is_readylist_empty(void){
 int get_ready_list_max_priority(){
 	struct thread *thread = list_entry(list_begin(&ready_list), struct thread, elem);
 	return thread->priority;
+}
+
+bool
+cmp_priority (const struct list_elem *a_, const struct list_elem *b_,
+            void *aux UNUSED) 
+{
+  const struct thread *ta = list_entry (a_, struct thread, elem);
+  const struct thread *tb = list_entry (b_, struct thread, elem);
+  
+  return ta->priority > tb->priority;
 }
