@@ -250,7 +250,6 @@ thread_unblock (struct thread *t) {
 	ASSERT (t->status == THREAD_BLOCKED);
 
 	list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
-	// thread_insert_priority(&ready_list, t);
 
 	t->status = THREAD_READY;
 
@@ -316,7 +315,6 @@ thread_yield (void) {
 
 	old_level = intr_disable ();
 	if (curr != idle_thread)
-		// list_push_back (&ready_list, &curr->elem);
 		list_insert_ordered(&ready_list, &curr->elem, cmp_priority, NULL);
 	do_schedule(THREAD_READY);
 	intr_set_level (old_level);
@@ -342,7 +340,7 @@ test_max_priority(void){
 	if (!list_empty(&ready_list)){
 		struct list_elem *list_elem = list_begin(&ready_list);
 		struct thread *thread = list_entry(list_elem, struct thread, elem);
-		if (thread->priority > thread_current()->priority){
+		if (thread->priority > thread_get_priority()){
 			if (!intr_context())
 				thread_yield();
 		}
@@ -712,7 +710,7 @@ void donate_priority(void){
 		if(! curr->wait_on_lock)
 			break;
 		struct thread *holder = curr->wait_on_lock->holder;
-		holder->priority = curr->priority;
+		holder->priority = thread_get_priority();
 		curr = holder;
 	}
 }
@@ -734,16 +732,13 @@ void remove_with_lock(struct lock *lock){
 	}
 }
 
-// 내 원래 우선순위로 돌리고
-// 나의 도네이션 리스트의 최고와 나를 비교해
-// 도네이션 리스트의 것이 더 크면 바꾼다
 void refresh_priority(void){
 	struct thread *curr = thread_current();
 	curr->priority = curr->init_priority;
 	if (!list_empty(&curr->donations)){
 		list_sort(&curr->donations, donate_cmp_priority, NULL);
 		struct thread *thread = list_entry(list_begin(&curr->donations), struct thread, donation_elem);
-		if (thread->priority > curr->priority)
+		if (thread->priority > thread_get_priority())
 			curr->priority = thread->priority;
 	}
 }
