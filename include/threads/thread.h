@@ -91,12 +91,16 @@ struct thread {
 	enum thread_status status;          /* Thread state. 4가지 : ready, blocked, running, dying*/
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int original_priority;
+
+	int init_priority;
+	struct lock* wait_on_lock;
+	struct list donations;
+	struct list_elem donation_elem;
+
 	int64_t wakeup_tick;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-
-	struct list wait_on_lock;
+	
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -158,6 +162,10 @@ int get_ready_list_max_priority(void);
 void test_max_priority(void);
 bool cmp_priority(const struct list_elem *a_, const struct list_elem *b_,
 				  void *aux UNUSED);
+bool donate_cmp_priority(const struct list_elem *a_, const struct list_elem *b_,
+				  void *aux UNUSED);
 
-
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
 #endif /* threads/thread.h */
