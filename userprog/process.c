@@ -186,6 +186,9 @@ process_exec (void *f_name) {
 	if (!success)
 		return -1;
 
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+
+
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -463,16 +466,15 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	// // 4. Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
-	// if_->R.rdi = argc;
-	// if_->R.rsi = if_->rsp - sum;
+	if_->rsp -= sum;	// stack pointer 옮겨줘
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp;
 
 	// // // 5. fake address
-	// sum += 8;
-	// memset(if_->rsp - sum, 0, sizeof(void *));
-
+	memset(if_->rsp - 8, 0, sizeof(void *));
 
 	// 확인
-    hex_dump((if_->rsp - sum), (if_->rsp - sum), sum, true);
+    hex_dump(if_->rsp - 8, if_->rsp - 8, USER_STACK - if_->rsp + 8, true);
 	
 
 	success = true;
