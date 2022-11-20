@@ -18,6 +18,8 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "lib/string.h"
+#include "lib/stdio.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -183,6 +185,9 @@ process_exec (void *f_name) {
 	if (!success)
 		return -1;
 
+	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
+
+
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -203,6 +208,9 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
+	while(1){
+		continue;
+	}
 	return -1;
 }
 
@@ -334,6 +342,19 @@ load (const char *file_name, struct intr_frame *if_) {
 		goto done;
 	process_activate (thread_current ());
 
+	// 문자열 파싱해서 넘겨주기
+	char *token, *save_ptr;
+	char *argv[128];
+	int argc = 0;
+	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
+		// token + '\0';
+		argv[argc] = token;
+		// printf ("token은 : '%s' #### argv[%d]는 %s\n", token, argc, argv[argc]);
+		argc++;
+	}
+
+	file_name = argv[0];
+
 	/* Open executable file. */
 	file = filesys_open (file_name);
 	if (file == NULL) {
@@ -415,6 +436,45 @@ load (const char *file_name, struct intr_frame *if_) {
 
 	/* TODO: Your code goes here.
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+
+	/* PROJECT 2: ARGUMENT PASSING */
+    size_t sum = 0;
+	char *argv_address[128];
+
+	// 1. token으로 잘라서 넣기
+    for(int i = argc-1; i >= 0; i--) {
+        size_t len = strlen(argv[i]) + 1;   // '\0' 포함
+        sum += len;
+        argv_address[i] = (if_->rsp - sum);
+        memcpy((if_->rsp - sum), argv[i], len);
+    }
+
+	// 2. word-align
+	while((if_->rsp - sum) % 8 != 0){
+		sum++;
+		*(uint8_t *) (if_->rsp - sum) = 0;
+	}
+
+	// 3. token 주소를 data로 넣기
+	sum += 8;
+	memset(if_->rsp - sum, 0, sizeof(char **));
+
+	for (int i = argc-1; i >=0 ; i--){
+		sum += 8;
+		memcpy(if_->rsp - sum, &argv_address[i], sizeof(char **));
+	}
+
+	// // 4. Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
+	if_->rsp -= sum;	// stack pointer 옮겨줘
+	if_->R.rdi = argc;
+	if_->R.rsi = if_->rsp;
+
+	// // // 5. fake address
+	memset(if_->rsp - 8, 0, sizeof(void *));
+
+	// 확인
+    hex_dump(if_->rsp - 8, if_->rsp - 8, USER_STACK - if_->rsp + 8, true);
+	
 
 	success = true;
 
