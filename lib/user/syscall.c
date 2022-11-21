@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "../syscall-nr.h"
 #include "include/lib/stdbool.h"
+#include "include/lib/user/syscall.h"
 
 __attribute__((always_inline))
 static __inline int64_t syscall (uint64_t num_, uint64_t a1_, uint64_t a2_,

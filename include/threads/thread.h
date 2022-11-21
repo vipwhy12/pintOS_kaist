@@ -99,10 +99,9 @@ struct thread {
 
 	int process_status;
 
-	int64_t wakeup_tick;
-	/* Shared between thread.c and synch.c. */
+	int64_t wakeup_tick;                /* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	
+	char *fd_table[10];                 /* file descriptor(fd) table */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

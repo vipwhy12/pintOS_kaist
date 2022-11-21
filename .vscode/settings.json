@@ -11,6 +11,8 @@
         "stdint.h": "c",
         "file.h": "c",
         "init.h": "c",
-        "filesys.h": "c"
+        "filesys.h": "c",
+        "inode.h": "c",
+        "directory.h": "c"
     }
 }

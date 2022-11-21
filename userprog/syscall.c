@@ -8,7 +8,10 @@
 #include "threads/flags.h"
 #include "intrinsic.h"
 #include "threads/init.h"
+#include "filesys/filesys.h"
 #include "filesys/file.h"
+#include "filesys/inode.h"
+
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -50,15 +53,37 @@ sys_exit_handler(int arg1){
 	thread_exit();
 }
 
-int
+void
 sys_write_handler(int arg1, void *arg2, unsigned arg3){
 	// file_write();
-
 }
 
+bool sys_create_handler(char *arg1, unsigned arg2){
+	return filesys_create(arg1, arg2);
+}
+
+bool sys_remove_handler(char *arg1){
+	return filesys_remove(arg1);
+} 
+
+int sys_open_handler(char *arg1){
+	// arg1은 파일 이름이야
+	// dir에서부터 시작해서 쭉쭉 내려와야?
+	// struct file * f = filesys_open(arg1);
+	// return f->pos;
+}
+
+// int sys_filesize_handler(int arg1){
+// 	struct file * f = filesys_open(arg1);
+// 	return f->inode->data.length;
+// }
+
+// int sys_read_handler(int arg1, void * arg2, unsigned arg3){
+	
+// }
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f) {
+syscall_handler (struct intr_frame *f) { 
 	// TODO: Your implementation goes here.
 	int syscall_n = f->R.rax;
 	switch (syscall_n)
@@ -71,8 +96,23 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	case SYS_WRITE:
 		printf("%s", f->R.rsi);
-		// sys_write_handler(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
+	case SYS_FORK:
+		break;
+	case SYS_CREATE:
+		f->R.rax = sys_create_handler(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_REMOVE:
+		f->R.rax = sys_remove_handler(f->R.rdi);
+		break;
+	case SYS_OPEN:
+		f->R.rax = sys_open_handler(f->R.rdi);
+		break;
+	case SYS_FILESIZE:
+		// f->R.rax = sys_filesize_handler(f->R.rdi);
+		break;
+	case SYS_READ:
+		// f->R.rax = sys_read_handler(f->R.rdi, f->R.rsi, f->R.rdx);
 	default:
 		break;
 	}

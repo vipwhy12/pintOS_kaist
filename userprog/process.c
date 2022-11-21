@@ -359,7 +359,6 @@ load (const char *file_name, struct intr_frame *if_) {
       argc++;
    }
    strlcpy(thread_current()->name, file_name, 16);
-   // thread_current()->name = file_name;
 
    file = filesys_open(file_name);
    if (file == NULL) {
