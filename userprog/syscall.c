@@ -39,8 +39,10 @@ syscall_init (void) {
 
 /* The main system call interface */
 void
-syscall_handler (struct intr_frame *f UNUSED) {
+syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
-	printf ("system call!\n");
-	thread_exit ();
+	// table도 괜찮지만, switch문으로 해라
+	printf("%d, %s, %d, %d\n", f->R.rax, f->R.rsi, f->R.rdi, f->R.rdx);
+	printf("system call!\n");
+	thread_exit();
 }

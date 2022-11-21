@@ -90,12 +90,19 @@ typedef int tid_t;
 struct thread {
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
-	enum thread_status status;          /* Thread state. */
+	enum thread_status status;          /* Thread state. 4가지 : ready, blocked, running, dying*/
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 
+	int init_priority;
+	struct lock* wait_on_lock;
+	struct list donations;
+	struct list_elem donation_elem;
+
+	int64_t wakeup_tick;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
+	
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -145,4 +152,22 @@ int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
 
+void thread_sleep(int64_t ticks);
+void thread_awake(int64_t ticks);
+void update_next_tick_to_awake(int64_t ticks);
+int64_t get_next_tick_to_awake(void);
+
+char is_readylist_empty(void);
+int get_ready_list_max_priority(void);
+
+
+void test_max_priority(void);
+bool cmp_priority(const struct list_elem *a_, const struct list_elem *b_,
+				  void *aux UNUSED);
+bool donate_cmp_priority(const struct list_elem *a_, const struct list_elem *b_,
+				  void *aux UNUSED);
+
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
 #endif /* threads/thread.h */

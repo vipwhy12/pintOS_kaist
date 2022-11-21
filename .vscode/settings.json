@@ -1,5 +1,13 @@
 {
     "files.associations": {
-        "stdio.h": "c"
+        "list.h": "c",
+        "synch.h": "c",
+        "syscall.h": "c",
+        "thread.h": "c",
+        "*.inc": "c",
+        "interrupt.h": "c",
+        "debug.h": "c",
+        "process.h": "c",
+        "stdint.h": "c"
     }
 }
