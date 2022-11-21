@@ -210,15 +210,15 @@ process_wait (tid_t child_tid) {
    /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
     * XXX:       to add infinite loop here before
     * XXX:       implementing the process_wait. */
-   
-   // child_tid라는 고유번호를 가진 thread가 destruction_req라는 리스트에 있나요? 그러면 while 나가세요.
-   while(1){
-      continue;
-   }
 
-   // 실행하기를 기다려
-   // thread_dying상태가 되면 
-   // 끝내
+   bool b_ptr = false;
+   while (!b_ptr)
+   {  enum intr_level old_level;
+      old_level = intr_disable ();
+      b_ptr = destruction_req_contains(child_tid);
+      intr_set_level(old_level);
+   }
+   
    return -1;
 }
 
@@ -230,8 +230,7 @@ process_exit (void) {
     * TODO: Implement process termination message (see
     * TODO: project2/process_termination.html).
     * TODO: We recommend you to implement process resource cleanup here. */
-   
-   printf("%s: exit(0)\n", curr->name);
+   printf("%s: exit(%d)\n", curr->name, curr->process_status);
    process_cleanup();
 }
 
@@ -356,16 +355,13 @@ load (const char *file_name, struct intr_frame *if_) {
    char *argv[128];
    int argc = 0;
    for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
-      // token + '\0';
       argv[argc] = token;
-      // printf ("token은 : '%s' #### argv[%d]는 %s\n", token, argc, argv[argc]);
       argc++;
    }
+   strlcpy(thread_current()->name, file_name, 16);
+   // thread_current()->name = file_name;
 
-   file_name = argv[0];
-
-   /* Open executable file. */
-   file = filesys_open (file_name);
+   file = filesys_open(file_name);
    if (file == NULL) {
       printf ("load: %s: open failed\n", file_name);
       goto done;
@@ -465,7 +461,7 @@ load (const char *file_name, struct intr_frame *if_) {
    }
 
    // step 2. Push the address of each string plus a null pointer sentinel
-   for (int i = argc-1; i >=0 ; i--){
+   for (int i = argc; i >=0 ; i--){
       sum += 8;
       if (i == argc)
          memset(if_->rsp - sum, 0, sizeof(char **));
@@ -482,7 +478,7 @@ load (const char *file_name, struct intr_frame *if_) {
    memset(if_->rsp - 8, 0, sizeof(void *));
 
    
-   hex_dump(if_->rsp, if_->rsp, sum, true);
+   // hex_dump(if_->rsp, if_->rsp, sum, true);
    
 
    success = true;

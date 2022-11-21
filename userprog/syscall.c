@@ -7,6 +7,8 @@
 #include "userprog/gdt.h"
 #include "threads/flags.h"
 #include "intrinsic.h"
+#include "threads/init.h"
+#include "filesys/file.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -37,12 +39,41 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
+void
+sys_halt_handler(){
+	power_off();
+}
+
+void
+sys_exit_handler(int arg1){
+	thread_current()->process_status = arg1;
+	thread_exit();
+}
+
+// int
+// sys_write_handler(int arg1, void *arg2, unsigned arg3){
+// 	// file_write();
+// }
+
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) {
 	// TODO: Your implementation goes here.
-	// table도 괜찮지만, switch문으로 해라
-	printf("%d, %s, %d, %d\n", f->R.rax, f->R.rsi, f->R.rdi, f->R.rdx);
-	printf("system call!\n");
-	thread_exit();
+	int syscall_n = f->R.rax;
+	switch (syscall_n)
+	{
+	case SYS_HALT:
+		sys_halt_handler();
+		break;
+	case SYS_EXIT:
+		// uint64_t arg1 = f->R.rdi;
+		sys_exit_handler(f->R.rdi);
+		break;
+	case SYS_WRITE:
+		printf("%s", f->R.rsi);
+		// sys_write_handler(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
+	default:
+		break;
+	}
 }
