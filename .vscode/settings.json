@@ -8,6 +8,9 @@
         "interrupt.h": "c",
         "debug.h": "c",
         "process.h": "c",
-        "stdint.h": "c"
+        "stdint.h": "c",
+        "file.h": "c",
+        "init.h": "c",
+        "filesys.h": "c"
     }
 }

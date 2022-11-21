@@ -678,6 +678,21 @@ is_readylist_empty(void){
 	return !list_empty(&ready_list) ? 0 : 1;
 }
 
+bool
+destruction_req_contains(tid_t child_tid){
+	struct list_elem *list_elem;
+	if (!list_empty(&destruction_req))
+	{
+		list_elem = list_begin(&destruction_req);
+		for (list_elem; list_elem != list_end(&destruction_req); list_elem = list_next(list_elem)){
+			struct thread *thread = list_entry(list_elem, struct thread, elem);
+			if (thread->tid == child_tid)
+				return true;
+		}
+	}
+	return false;
+}
+
 int 
 get_ready_list_max_priority(){
 	struct thread *thread = list_entry(list_begin(&ready_list), struct thread, elem);

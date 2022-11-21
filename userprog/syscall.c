@@ -50,10 +50,11 @@ sys_exit_handler(int arg1){
 	thread_exit();
 }
 
-// int
-// sys_write_handler(int arg1, void *arg2, unsigned arg3){
-// 	// file_write();
-// }
+int
+sys_write_handler(int arg1, void *arg2, unsigned arg3){
+	// file_write();
+
+}
 
 /* The main system call interface */
 void
@@ -66,7 +67,6 @@ syscall_handler (struct intr_frame *f) {
 		sys_halt_handler();
 		break;
 	case SYS_EXIT:
-		// uint64_t arg1 = f->R.rdi;
 		sys_exit_handler(f->R.rdi);
 		break;
 	case SYS_WRITE:
