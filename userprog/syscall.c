@@ -12,6 +12,7 @@
 #include "filesys/file.h"
 #include "filesys/inode.h"
 #include <stdio.h>
+#include "threads/synch.h"
 
 
 // #include <sys/stat.h>
@@ -57,10 +58,6 @@ sys_exit_handler(int arg1){
 	thread_exit();
 }
 
-void
-sys_write_handler(int fd, void *arg2, unsigned arg3){
-}
-
 bool sys_create_handler(char *filename, unsigned intial_size){
 	struct thread *curr = thread_current();
 	if (!(filename 
@@ -95,6 +92,7 @@ int sys_open_handler(char *filename){
 	}
 	struct file *result = filesys_open(filename);
 	if (result != NULL){
+		result->inode->open_cnt += 1;
 		f_table[i] = result;
 		return i;
 	}
@@ -117,8 +115,22 @@ int sys_close_handler(int fd){
 }
 
 int sys_filesize_handler(int fd){
-	struct file * f = filesys_open(fd);
+	struct thread *curr = thread_current();
+	struct thread **f_table = curr->fd_table;
+	struct file *f = f_table[fd];
 	return f->inode->data.length;
+}
+
+int sys_read_handler(int fd, void* buffer, unsigned size){
+	struct thread *curr = thread_current();
+	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
+	{
+		thread_current()->process_status = -1;
+		thread_exit();
+	}
+	struct file *f = curr->fd_table[fd];
+	return file_read(f, buffer, size);
+	
 }
 
 /* The main system call interface */
@@ -153,6 +165,9 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	case SYS_CLOSE:
 		f->R.rax = sys_close_handler(f->R.rdi);
+		break;
+	case SYS_READ:
+		f->R.rax = sys_read_handler(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	default:
 		break;
