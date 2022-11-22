@@ -351,7 +351,7 @@ load (const char *file_name, struct intr_frame *if_) {
       goto done;
    process_activate (thread_current ());
 
-   // 문자열 파싱해서 넘겨주기
+   // Tokenize & put them to argv
    char *token, *save_ptr;
    char *argv[128];
    int argc = 0;

@@ -17,6 +17,8 @@
         "types.h": "c",
         "stat.h": "c",
         "off_t.h": "c",
-        "fcntl.h": "c"
+        "fcntl.h": "c",
+        "intr-stubs.h": "c",
+        "intrinsic.h": "c"
     }
 }
