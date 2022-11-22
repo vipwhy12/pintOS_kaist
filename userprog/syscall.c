@@ -11,7 +11,11 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/inode.h"
+#include <stdio.h>
 
+
+// #include <sys/stat.h>
+// #include <fcntl.h>
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -54,33 +58,69 @@ sys_exit_handler(int arg1){
 }
 
 void
-sys_write_handler(int arg1, void *arg2, unsigned arg3){
-	// file_write();
+sys_write_handler(int fd, void *arg2, unsigned arg3){
 }
 
-bool sys_create_handler(char *arg1, unsigned arg2){
-	return filesys_create(arg1, arg2);
+bool sys_create_handler(char *filename, unsigned intial_size){
+	struct thread *curr = thread_current();
+	if (!(filename 
+			&& is_user_vaddr(filename)
+		  	&& pml4_get_page(curr->pml4, filename)))
+	{
+		curr->process_status = -1;
+		thread_exit();
+	}
+	return  filesys_create(filename, intial_size);
 }
 
-bool sys_remove_handler(char *arg1){
-	return filesys_remove(arg1);
+bool sys_remove_handler(char *filename){
+	return filesys_remove(filename);
 } 
 
-int sys_open_handler(char *arg1){
-	// arg1은 파일 이름이야
-	// dir에서부터 시작해서 쭉쭉 내려와야?
-	// struct file * f = filesys_open(arg1);
-	// return f->pos;
+int sys_open_handler(char *filename){
+	struct thread *curr = thread_current();
+	if (!(filename
+			&& is_user_vaddr(filename)
+		  	&& pml4_get_page(curr->pml4, filename)))
+	{
+		curr->process_status = -1;
+		thread_exit();
+	}
+	struct file **f_table = curr->fd_table;
+	int i = 3;
+	for (i; i < 10; i++)
+	{
+		if (f_table[i] == NULL)
+			break;
+	}
+	struct file *result = filesys_open(filename);
+	if (result != NULL){
+		f_table[i] = result;
+		return i;
+	}
+	return -1;
 }
 
-// int sys_filesize_handler(int arg1){
-// 	struct file * f = filesys_open(arg1);
-// 	return f->inode->data.length;
-// }
+int sys_close_handler(int fd){
+	struct file **f_table = thread_current()->fd_table;
+	if (fd < 3 || fd >= 10){
+		thread_current()->process_status = -1;
+		thread_exit();
+	}
+	else if (f_table[fd]){
+		f_table[fd] == NULL;
+	}
+	else{
+		thread_current()->process_status = -1;
+		thread_exit();
+	}
+}
 
-// int sys_read_handler(int arg1, void * arg2, unsigned arg3){
-	
-// }
+int sys_filesize_handler(int fd){
+	struct file * f = filesys_open(fd);
+	return f->inode->data.length;
+}
+
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) { 
@@ -109,10 +149,11 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = sys_open_handler(f->R.rdi);
 		break;
 	case SYS_FILESIZE:
-		// f->R.rax = sys_filesize_handler(f->R.rdi);
+		f->R.rax = sys_filesize_handler(f->R.rdi);
 		break;
-	case SYS_READ:
-		// f->R.rax = sys_read_handler(f->R.rdi, f->R.rsi, f->R.rdx);
+	case SYS_CLOSE:
+		f->R.rax = sys_close_handler(f->R.rdi);
+		break;
 	default:
 		break;
 	}

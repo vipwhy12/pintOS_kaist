@@ -439,6 +439,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
+	for (int i = 3; i < 10; i++){
+		t->fd_table[i] = NULL;
+	}
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

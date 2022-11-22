@@ -13,6 +13,10 @@
         "init.h": "c",
         "filesys.h": "c",
         "inode.h": "c",
-        "directory.h": "c"
+        "directory.h": "c",
+        "types.h": "c",
+        "stat.h": "c",
+        "off_t.h": "c",
+        "fcntl.h": "c"
     }
 }

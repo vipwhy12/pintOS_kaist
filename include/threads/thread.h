@@ -101,7 +101,7 @@ struct thread {
 
 	int64_t wakeup_tick;                /* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	char *fd_table[10];                 /* file descriptor(fd) table */
+	struct file* fd_table[10];          /* file descriptor(fd) table */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
