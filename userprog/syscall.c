@@ -41,6 +41,79 @@ syscall_init (void) {
 void
 syscall_handler (struct intr_frame *f UNUSED) {
 	// TODO: Your implementation goes here.
-	printf ("system call!\n");
+		// TODO: Your implementation goes here.
+	int syscall_no = f->R.rax;  // 파일 네임
+
+	uint64_t a1 = f->R.rdi;		// c(개수?)
+	uint64_t a2 = f->R.rsi;		// v(데이터)
+	// uint64_t a3 = f->R.rdx;     //
+	// uint64_t a4 = f->R.r10;
+	// uint64_t a5 = f->R.r8;
+	// uint64_t a6 = f->R.r9;
+	
+
+	switch (syscall_no) {		// rax is the system call number
+		
+		case SYS_HALT : 
+			halt_handler();
+		break;
+
+		case SYS_EXIT : 
+		exit_handler (a1);
+		break;
+			
+		// case SYS_FORK :
+		// a3 = fork_handler(a3, f);
+		// break;
+
+		// case SYS_EXEC :
+		// 	if (exec_handler (a1) == -1)
+		// 	{
+		// 		exit(-1);
+		// 	}
+		// break;
+
+		// case SYS_WAIT :
+		// break;
+
+		// case SYS_CREATE :
+		// syscall_no = create_sys(syscall_no, a1);
+		// break;
+
+		// case SYS_REMOVE :
+		// break;
+
+		// case SYS_OPEN :
+		// break;
+
+		// case SYS_FILESIZE :
+		// break;
+
+		// case SYS_READ :
+		// break;
+
+		case SYS_WRITE :
+		printf("%s", (char*)a2);
+		break;
+
+		// case SYS_SEEK :
+		// break;
+
+		// case SYS_TELL :
+		// break;
+
+		// case SYS_CLOSE :
+		// break;
+
+	}
+	//printf ("system call!\n");
+	//thread_exit ();
+}
+
+void
+exit_handler (int status) {
+	struct thread *t = thread_current();
+	t->exit_status = status;
+	printf("%s: exit(%d)\n", thread_name(), status); 
 	thread_exit ();
 }

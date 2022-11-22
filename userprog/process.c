@@ -51,6 +51,10 @@ process_create_initd (const char *file_name) {
 	if (fn_copy == NULL)
 		return TID_ERROR;
 	strlcpy (fn_copy, file_name, PGSIZE);
+
+	char *save_ptr;
+	strtok_r(file_name, " ", &save_ptr);
+
 	/* Create a new thread to execute FILE_NAME. */
 	tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
 	if (tid == TID_ERROR)
@@ -177,6 +181,8 @@ process_exec (void *f_name) {
 	/* We first kill the current context */
 	process_cleanup ();
 
+	
+
 	/* And then load the binary */
 	success = load (file_name, &_if);
 
@@ -208,9 +214,11 @@ process_wait (tid_t child_tid UNUSED) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
-	while(1){
-		continue;
-	}
+	//while(1){
+	//	continue;
+	//}
+
+	thread_set_priority(thread_get_priority()-1);
 	return -1;
 }
 
@@ -349,7 +357,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
 		// token + '\0';
 		argv[argc] = token;
-		// printf ("token은 : '%s' #### argv[%d]는 %s\n", token, argc, argv[argc]);
+		//printf ("token은 : '%s' #### argv[%d]는 %s\n", token, argc, argv[argc]);
 		argc++;
 	}
 
@@ -438,8 +446,8 @@ load (const char *file_name, struct intr_frame *if_) {
 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
 	/* PROJECT 2: ARGUMENT PASSING */
-    size_t sum = 0;
-	char *argv_address[128];
+  size_t sum = 0;
+	char *argv_address[64];
 
 	// 1. token으로 잘라서 넣기
     for(int i = argc-1; i >= 0; i--) {
@@ -473,7 +481,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	memset(if_->rsp - 8, 0, sizeof(void *));
 
 	// 확인
-    hex_dump(if_->rsp - 8, if_->rsp - 8, USER_STACK - if_->rsp + 8, true);
+    //hex_dump(if_->rsp - 8, if_->rsp - 8, USER_STACK - if_->rsp + 8, true);
 	
 
 	success = true;
