@@ -125,6 +125,7 @@ __do_fork (void *aux) {
    struct thread *parent = (struct thread *) aux;
    struct thread *current = thread_current ();
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
+   // 부모의 intr_frame의 복제본을 자식의(current)의 intr_frame
    struct intr_frame *parent_if;
    bool succ = true;
 
@@ -152,7 +153,15 @@ __do_fork (void *aux) {
     * TODO:       from the fork() until this function successfully duplicates
     * TODO:       the resources of parent.*/
 
-   process_init ();
+   for (int fd = 3; fd < 10; fd++){
+      if (parent->fd_table[fd]){
+         current->fd_table[fd] = file_duplicate(parent->fd_table[fd]);
+      }else{
+         current->fd_table[fd] = NULL;
+      }
+   }
+
+   process_init();
 
    /* Finally, switch to the newly created process. */
    if (succ)
@@ -338,7 +347,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
-   struct thread *t = thread_current ();
+   struct thread *t = thread_current();
    struct ELF ehdr;
    struct file *file = NULL;
    off_t file_ofs;
@@ -353,10 +362,18 @@ load (const char *file_name, struct intr_frame *if_) {
 
    // Tokenize & put them to argv
    char *token, *save_ptr;
-   char *argv[128];
+   char *argv[64];
    int argc = 0;
-   for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
-      argv[argc] = token;
+   if (strchr(file_name, ' '))
+   {
+      for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
+         argv[argc] = token;
+         argc++;
+      }
+   }
+   else
+   {
+      argv[argc] = file_name;
       argc++;
    }
    strlcpy(thread_current()->name, file_name, 16);

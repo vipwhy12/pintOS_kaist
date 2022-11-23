@@ -430,7 +430,11 @@ init_thread (struct thread *t, const char *name, int priority) {
 	ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
 	ASSERT (name != NULL);
 
-	memset (t, 0, sizeof *t);
+	// FILE *fin = stdin;
+	// FILE *fout = stdout;
+	// FILE *ferr = stderr;
+
+	memset(t, 0, sizeof *t);
 	t->status = THREAD_BLOCKED;
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
@@ -439,7 +443,12 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
-	for (int i = 3; i < 10; i++){
+	// t->fd_table[0] = fin;
+	// t->fd_table[1] = fout;
+	// t->fd_table[2] = ferr;
+
+	for (int i = 3; i < 10; i++)
+	{
 		t->fd_table[i] = NULL;
 	}
 }

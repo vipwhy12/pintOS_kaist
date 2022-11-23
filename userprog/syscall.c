@@ -13,6 +13,7 @@
 #include "filesys/inode.h"
 #include <stdio.h>
 #include "threads/synch.h"
+#include "userprog/process.h"
 
 
 // #include <sys/stat.h>
@@ -118,7 +119,7 @@ int sys_filesize_handler(int fd){
 	struct thread *curr = thread_current();
 	struct thread **f_table = curr->fd_table;
 	struct file *f = f_table[fd];
-	return f->inode->data.length;
+	return file_length(f);
 }
 
 int sys_read_handler(int fd, void* buffer, unsigned size){
@@ -130,9 +131,46 @@ int sys_read_handler(int fd, void* buffer, unsigned size){
 	}
 	struct file *f = curr->fd_table[fd];
 	return file_read(f, buffer, size);
-	
 }
 
+int sys_write_handler(int fd, const void *buffer, unsigned size){
+	struct thread *curr = thread_current();
+	if (fd == 1){
+		putbuf(buffer, size);
+		return size;
+	}
+	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
+	{
+		curr->process_status = -1;
+		thread_exit();
+	}
+
+	struct file *f = curr->fd_table[fd];
+	return file_write(f, buffer, size);
+}
+
+
+int sys_fork_handler(char *thread_name){
+	struct thread *curr = thread_current();
+	return process_fork(thread_name, &curr->tf);
+}
+
+int sys_wait_handler(int pid){
+
+}
+
+int sys_exec_handler(char * filename){
+	struct thread *curr = thread_current();
+	if (!(filename
+			&& is_user_vaddr(filename)
+		  	&& pml4_get_page(curr->pml4, filename)))
+	{
+		curr->process_status = -1;
+		thread_exit();
+	}
+
+	return process_exec(filename);
+}
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) { 
@@ -145,11 +183,6 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	case SYS_EXIT:
 		sys_exit_handler(f->R.rdi);
-		break;
-	case SYS_WRITE:
-		printf("%s", f->R.rsi);
-		break;
-	case SYS_FORK:
 		break;
 	case SYS_CREATE:
 		f->R.rax = sys_create_handler(f->R.rdi, f->R.rsi);
@@ -169,6 +202,17 @@ syscall_handler (struct intr_frame *f) {
 	case SYS_READ:
 		f->R.rax = sys_read_handler(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
+	case SYS_WRITE:
+		f->R.rax = sys_write_handler(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
+	case SYS_FORK:
+		f->R.rax = sys_fork_handler(f->R.rdi);
+		break;
+	case SYS_WAIT:
+		f->R.rax = sys_wait_handler(f->R.rdi);
+		break;
+	case SYS_EXEC:
+		f->R.rax = sys_exec_handler(f->R.rdi);
 	default:
 		break;
 	}

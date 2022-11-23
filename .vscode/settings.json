@@ -19,6 +19,7 @@
         "off_t.h": "c",
         "fcntl.h": "c",
         "intr-stubs.h": "c",
-        "intrinsic.h": "c"
+        "intrinsic.h": "c",
+        "stdio.h": "c"
     }
 }
