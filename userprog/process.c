@@ -125,8 +125,8 @@ __do_fork (void *aux) {
    struct thread *parent = (struct thread *) aux;
    struct thread *current = thread_current ();
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-   // 부모의 intr_frame의 복제본을 자식의(current)의 intr_frame
-   struct intr_frame *parent_if;
+  
+   struct intr_frame *parent_if = &parent->tf;
    bool succ = true;
 
    /* 1. Read the cpu context to local stack. */
@@ -152,6 +152,7 @@ __do_fork (void *aux) {
     * TODO:       in include/filesys/file.h. Note that parent should not return
     * TODO:       from the fork() until this function successfully duplicates
     * TODO:       the resources of parent.*/
+   // memcpy (&current->tf, &if_, sizeof (struct intr_frame));
 
    for (int fd = 3; fd < 10; fd++){
       if (parent->fd_table[fd]){
@@ -285,55 +286,55 @@ process_activate (struct thread *next) {
 /* We load ELF binaries.  The following definitions are taken
  * from the ELF specification, [ELF1], more-or-less verbatim.  */
 
-/* ELF types.  See [ELF1] 1-2. */
-#define EI_NIDENT 16
+// /* ELF types.  See [ELF1] 1-2. */
+// #define EI_NIDENT 16
 
-#define PT_NULL    0            /* Ignore. */
-#define PT_LOAD    1            /* Loadable segment. */
-#define PT_DYNAMIC 2            /* Dynamic linking info. */
-#define PT_INTERP  3            /* Name of dynamic loader. */
-#define PT_NOTE    4            /* Auxiliary info. */
-#define PT_SHLIB   5            /* Reserved. */
-#define PT_PHDR    6            /* Program header table. */
-#define PT_STACK   0x6474e551   /* Stack segment. */
+// #define PT_NULL    0            /* Ignore. */
+// #define PT_LOAD    1            /* Loadable segment. */
+// #define PT_DYNAMIC 2            /* Dynamic linking info. */
+// #define PT_INTERP  3            /* Name of dynamic loader. */
+// #define PT_NOTE    4            /* Auxiliary info. */
+// #define PT_SHLIB   5            /* Reserved. */
+// #define PT_PHDR    6            /* Program header table. */
+// #define PT_STACK   0x6474e551   /* Stack segment. */
 
-#define PF_X 1          /* Executable. */
-#define PF_W 2          /* Writable. */
-#define PF_R 4          /* Readable. */
+// #define PF_X 1          /* Executable. */
+// #define PF_W 2          /* Writable. */
+// #define PF_R 4          /* Readable. */
 
 /* Executable header.  See [ELF1] 1-4 to 1-8.
  * This appears at the very beginning of an ELF binary. */
-struct ELF64_hdr {
-   unsigned char e_ident[EI_NIDENT];
-   uint16_t e_type;
-   uint16_t e_machine;
-   uint32_t e_version;
-   uint64_t e_entry;
-   uint64_t e_phoff;
-   uint64_t e_shoff;
-   uint32_t e_flags;
-   uint16_t e_ehsize;
-   uint16_t e_phentsize;
-   uint16_t e_phnum;
-   uint16_t e_shentsize;
-   uint16_t e_shnum;
-   uint16_t e_shstrndx;
-};
+// struct ELF64_hdr {
+//    unsigned char e_ident[EI_NIDENT];
+//    uint16_t e_type;
+//    uint16_t e_machine;
+//    uint32_t e_version;
+//    uint64_t e_entry;
+//    uint64_t e_phoff;
+//    uint64_t e_shoff;
+//    uint32_t e_flags;
+//    uint16_t e_ehsize;
+//    uint16_t e_phentsize;
+//    uint16_t e_phnum;
+//    uint16_t e_shentsize;
+//    uint16_t e_shnum;
+//    uint16_t e_shstrndx;
+// };
 
-struct ELF64_PHDR {
-   uint32_t p_type;
-   uint32_t p_flags;
-   uint64_t p_offset;
-   uint64_t p_vaddr;
-   uint64_t p_paddr;
-   uint64_t p_filesz;
-   uint64_t p_memsz;
-   uint64_t p_align;
-};
+// struct ELF64_PHDR {
+//    uint32_t p_type;
+//    uint32_t p_flags;
+//    uint64_t p_offset;
+//    uint64_t p_vaddr;
+//    uint64_t p_paddr;
+//    uint64_t p_filesz;
+//    uint64_t p_memsz;
+//    uint64_t p_align;
+// };
 
-/* Abbreviations */
-#define ELF ELF64_hdr
-#define Phdr ELF64_PHDR
+// /* Abbreviations */
+// #define ELF ELF64_hdr
+// #define Phdr ELF64_PHDR
 
 static bool setup_stack (struct intr_frame *if_);
 static bool validate_segment (const struct Phdr *, struct file *);
@@ -377,13 +378,12 @@ load (const char *file_name, struct intr_frame *if_) {
       argc++;
    }
    strlcpy(thread_current()->name, file_name, 16);
-
    file = filesys_open(file_name);
    if (file == NULL) {
       printf ("load: %s: open failed\n", file_name);
       goto done;
    }
-
+   
    /* Read and verify executable header. */
    if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
          || memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
@@ -422,7 +422,8 @@ load (const char *file_name, struct intr_frame *if_) {
             goto done;
          case PT_LOAD:
             if (validate_segment (&phdr, file)) {
-               bool writable = (phdr.p_flags & PF_W) != 0;
+               // bool writable = (ehdr.e_type == 4) != 0;
+               bool writable = (phdr.p_flags && PF_W) != 0;
                uint64_t file_page = phdr.p_offset & ~PGMASK;
                uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
                uint64_t page_offset = phdr.p_vaddr & PGMASK;
@@ -460,15 +461,15 @@ load (const char *file_name, struct intr_frame *if_) {
     * TODO: Implement argument passing (see project2/argument_passing.html). */
 
    /* PROJECT 2: ARGUMENT PASSING */
-    size_t sum = 0;
+   size_t sum = 0;
    char *argv_address[64];
 
    // step 3-1. Break the command into words
-    for(int i = argc-1; i >= 0; i--) {
-        size_t len = strlen(argv[i]) + 1;   // '\0' 포함
-        sum += len;
-        argv_address[i] = (if_->rsp - sum);
-        memcpy((if_->rsp - sum), argv[i], len);
+   for(int i = argc-1; i >= 0; i--) {
+      size_t len = strlen(argv[i]) + 1;   // '\0' 포함
+      sum += len;
+      argv_address[i] = (if_->rsp - sum);
+      memcpy((if_->rsp - sum), argv[i], len);
     }
 
    // step 3-2. Word-Align
@@ -496,7 +497,9 @@ load (const char *file_name, struct intr_frame *if_) {
 
    
    // hex_dump(if_->rsp, if_->rsp, sum, true);
-   
+   // if (ehdr.e_type == 4){
+   //    file->deny_write = true;
+   // }
 
    success = true;
 

@@ -1,5 +1,6 @@
 #include "userprog/syscall.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -11,13 +12,9 @@
 #include "filesys/filesys.h"
 #include "filesys/file.h"
 #include "filesys/inode.h"
-#include <stdio.h>
 #include "threads/synch.h"
 #include "userprog/process.h"
 
-
-// #include <sys/stat.h>
-// #include <fcntl.h>
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
@@ -91,13 +88,19 @@ int sys_open_handler(char *filename){
 		if (f_table[i] == NULL)
 			break;
 	}
-	struct file *result = filesys_open(filename);
-	if (result != NULL){
-		result->inode->open_cnt += 1;
-		f_table[i] = result;
-		return i;
+	struct file *file = filesys_open(filename);
+	if (!file)
+		return -1;
+	
+	file->inode->open_cnt += 1;
+	struct ELF ehdr;
+	if (file_read(file, &ehdr, sizeof ehdr) == sizeof ehdr && memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) == 0 && ehdr.e_type == 2 && ehdr.e_machine == 0x3E && ehdr.e_version == 1 && ehdr.e_phentsize == sizeof(struct Phdr) && ehdr.e_phnum <= 1024)
+	{
+		file_deny_write(file);
 	}
-	return -1;
+	f_table[i] = file;
+
+	return i;
 }
 
 int sys_close_handler(int fd){
@@ -122,6 +125,7 @@ int sys_filesize_handler(int fd){
 	return file_length(f);
 }
 
+//fd의 file에 적힌 것을 buffer에 읽어온다.
 int sys_read_handler(int fd, void* buffer, unsigned size){
 	struct thread *curr = thread_current();
 	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
@@ -130,11 +134,15 @@ int sys_read_handler(int fd, void* buffer, unsigned size){
 		thread_exit();
 	}
 	struct file *f = curr->fd_table[fd];
+	if (!f->deny_write){
+		return file_read_at(f, buffer, size, f->pos-(sizeof (struct ELF) ));
+	}
 	return file_read(f, buffer, size);
 }
 
-int sys_write_handler(int fd, const void *buffer, unsigned size){
+int sys_write_handler(int fd, void *buffer, unsigned size){
 	struct thread *curr = thread_current();
+
 	if (fd == 1){
 		putbuf(buffer, size);
 		return size;
@@ -144,11 +152,13 @@ int sys_write_handler(int fd, const void *buffer, unsigned size){
 		curr->process_status = -1;
 		thread_exit();
 	}
-
 	struct file *f = curr->fd_table[fd];
+
+	if (!f->deny_write){
+		return file_write_at(f, buffer, size, f->pos-(sizeof (struct ELF)));
+	}
 	return file_write(f, buffer, size);
 }
-
 
 int sys_fork_handler(char *thread_name){
 	struct thread *curr = thread_current();
@@ -168,9 +178,9 @@ int sys_exec_handler(char * filename){
 		curr->process_status = -1;
 		thread_exit();
 	}
-
 	return process_exec(filename);
 }
+
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) { 
@@ -213,6 +223,7 @@ syscall_handler (struct intr_frame *f) {
 		break;
 	case SYS_EXEC:
 		f->R.rax = sys_exec_handler(f->R.rdi);
+		break;
 	default:
 		break;
 	}

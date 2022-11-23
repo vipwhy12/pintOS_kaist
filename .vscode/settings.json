@@ -20,6 +20,7 @@
         "fcntl.h": "c",
         "intr-stubs.h": "c",
         "intrinsic.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "syscall-nr.h": "c"
     }
 }
