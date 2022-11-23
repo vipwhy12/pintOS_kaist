@@ -44,6 +44,7 @@ struct intr_frame {
 	uint16_t ds;
 	uint16_t __pad3;
 	uint32_t __pad4;
+
 	/* Pushed by intrNN_stub in intr-stubs.S. */
 	uint64_t vec_no; /* Interrupt vector number. */
 /* Sometimes pushed by the CPU,

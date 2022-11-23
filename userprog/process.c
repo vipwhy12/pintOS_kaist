@@ -263,6 +263,10 @@ process_cleanup (void) {
 
 /* Sets up the CPU for running user code in the nest thread.
  * This function is called on every context switch. */
+
+/* 커널 가상 메모리 주소의 시작점으로 세팅해줌으로서 
+*  유저 프로세스에서 커널 모드로 전환될 때 커널 스택 메모리 어디에서 데이터를 쌓아 나가면 될 지 알려준다.
+*/
 void
 process_activate (struct thread *next) {
 	/* Activate thread's page tables. */
@@ -270,6 +274,7 @@ process_activate (struct thread *next) {
 
 	/* Set thread's kernel stack for use in processing interrupts. */
 	tss_update (next);
+
 }
 
 /* We load ELF binaries.  The following definitions are taken
@@ -335,6 +340,11 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Stores the executable's entry point into *RIP
  * and its initial stack pointer into *RSP.
  * Returns true if successful, false otherwise. */
+
+/* process_activate()에서 TSS를 원래 Caller의 커널 스택 맨 위로 놓는다. 
+*	 즉, callee도 caller와 같은 커널 스택을 쓴다. 
+*	 유저 프로세스만 바꿔치기 된 것이라 할 수 있음
+*/ 
 static bool
 load (const char *file_name, struct intr_frame *if_) {
 	struct thread *t = thread_current ();
@@ -345,9 +355,12 @@ load (const char *file_name, struct intr_frame *if_) {
 	int i;
 
 	/* Allocate and activate page directory. */
+	/* 페이지 디렉토리 생성 */
 	t->pml4 = pml4_create ();
 	if (t->pml4 == NULL)
 		goto done;
+
+	/* 페이지 테이블 활성화 */
 	process_activate (thread_current ());
 
 	// 문자열 파싱해서 넘겨주기
@@ -371,6 +384,7 @@ load (const char *file_name, struct intr_frame *if_) {
 	}
 
 	/* Read and verify executable header. */
+	/* ELF파일의 헤더 정보를 읽어와 저장 */
 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
 			|| ehdr.e_type != 2

@@ -1,11 +1,15 @@
 {
     "files.associations": {
+        "\"*html\"": "\"html\"",
         "list.h": "c",
         "synch.h": "c",
         "syscall.h": "c",
         "thread.h": "c",
         "*.inc": "c",
         "interrupt.h": "c",
-        "debug.h": "c"
+        "debug.h": "c",
+        "syscall-nr.h": "c",
+        "loader.h": "c",
+        "gdt.h": "c"
     }
 }

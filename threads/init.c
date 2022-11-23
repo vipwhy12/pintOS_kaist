@@ -74,7 +74,13 @@ main (void) {
 	bss_init ();
 
 	/* Break command line into arguments and parse options. */
+	/* command 라인을 읽어와 argv에 저장 */
+	/* argv = ["pintos", "-q", "run", "'echo x'", NULL] */
 	argv = read_command_line ();
+
+	/* argv를 파싱하고 추가적인 option들을 세팅한다. */
+	/* run 등의 action부터 argv에 다시 넣는다. */
+	/* argv = ["run", "'echo x'", NULL] */
 	argv = parse_options (argv);
 
 	/* Initialize ourselves as a thread so we can use locks,
@@ -119,6 +125,7 @@ main (void) {
 	printf ("Boot complete.\n");
 
 	/* Run actions specified on kernel command line. */
+	/* 해당 인자(argv)를 기준으로 run_action 실행 */
 	run_actions (argv);
 
 	/* Finish up. */
@@ -253,6 +260,8 @@ run_task (char **argv) {
 
 /* Executes all of the actions specified in ARGV[]
    up to the null pointer sentinel. */
+
+/* argv = ["run", "'echo x'", NULL] */
 static void
 run_actions (char **argv) {
 	/* An action. */

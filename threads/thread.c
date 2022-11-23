@@ -288,6 +288,8 @@ thread_tid (void) {
 
 /* Deschedules the current thread and destroys it.  Never
    returns to the caller. */
+
+/* 현재 스레드의 예약을 취소하고 삭제합니다. 호출자에게 반환됩니다. */	 
 void
 thread_exit (void) {
 	ASSERT (!intr_context ());

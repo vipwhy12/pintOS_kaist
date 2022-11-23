@@ -11,6 +11,7 @@
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
+
 /* System call.
  *
  * Previously system call services was handled by the interrupt handler
@@ -37,29 +38,83 @@ syscall_init (void) {
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
 }
 
-/* The main system call interface */
-void
-syscall_handler (struct intr_frame *f UNUSED) {
-	// TODO: Your implementation goes here.
-		// TODO: Your implementation goes here.
-	int syscall_no = f->R.rax;  // 파일 네임
 
-	uint64_t a1 = f->R.rdi;		// c(개수?)
-	uint64_t a2 = f->R.rsi;		// v(데이터)
-	// uint64_t a3 = f->R.rdx;     //
-	// uint64_t a4 = f->R.r10;
-	// uint64_t a5 = f->R.r8;
-	// uint64_t a6 = f->R.r9;
-	
+void
+exit_handler (int status) {
+	struct thread *curr = thread_current();
+	curr->exit_status = status;
+	printf("%s: exit(%d)\n", thread_name(), status); 
+	thread_exit ();
+}
+
+void 
+halt_handler (){
+	power_off();
+}
+
+/* create : 파일을 생성하는 시스템 콜 (file, initial_size) */
+bool create_handler(const char * file, unsigned initial_size){
+	// if(*file == NULL){
+	// 	exit(1);
+	// }
+	check_address(file);
+	return filesys_create(file, initial_size);
+}    
+
+
+void check_address(void *addr){
+	struct thread *curr = thread_current();
+	/* 유저 메모리 주소에 있는지, 물리 메모리에 맵핑이 된 주소인지 확인 */
+
+
+	if(!is_user_vaddr(addr) || pml4_get_page(curr->pml4, addr) == NULL && addr == NULL)
+		exit(-1);
+}
+
+void get_argument(void *rsp, int **arg, int count){
+	rsp = (int64_t *)rsp + 2;
+	for (int i = 0; i < count; i++){
+		arg[i] = rsp;
+		rsp = (int64_t *)rsp + 1;
+	}
+}
+
+void exit (int status){
+	struct thread* cur = thread_current();
+	cur->exit_status = status;
+	printf("%s: exit(%d)\n", cur->name, status);
+	thread_exit();
+}
+
+
+/* The main system call interface */
+/* 시스템 콜이 레지스터 rax에 저장한 시스템 콜 넘버에 따라 각기 다른 작업을 수행한다. */
+void
+syscall_handler (struct intr_frame *f) {
+	// TODO: Your implementation goes here.
+	// TODO: Your implementation goes here.
+
+	/* rax : 시스템 콜 번호 */
+	int syscall_no = f->R.rax;  
+
+	/* 인자 전달 순서 */
+	// uint64_t rdi = f->R.rdi;			
+	// uint64_t rsi = f->R.rsi;	
+	// uint64_t rdx = f->R.rdx;
+	// uint64_t r10 = f->R.r10;
+	// uint64_t r8 = f->R.r8;
+	// uint64_t r9 = f->R.r9;	
 
 	switch (syscall_no) {		// rax is the system call number
-		
+
+		/* SYS_HALT : pintos 종료 */
 		case SYS_HALT : 
 			halt_handler();
 		break;
 
+		/* SYS_EXIT : */
 		case SYS_EXIT : 
-		exit_handler (a1);
+			exit(f->R.rdi);
 		break;
 			
 		// case SYS_FORK :
@@ -76,9 +131,9 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// case SYS_WAIT :
 		// break;
 
-		// case SYS_CREATE :
-		// syscall_no = create_sys(syscall_no, a1);
-		// break;
+		case SYS_CREATE :
+			f -> R.rax = create_handler(f->R.rdi, f->R.rsi);
+		break;
 
 		// case SYS_REMOVE :
 		// break;
@@ -93,7 +148,7 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// break;
 
 		case SYS_WRITE :
-		printf("%s", (char*)a2);
+		printf("%s", (char*)f->R.rsi);
 		break;
 
 		// case SYS_SEEK :
@@ -106,14 +161,4 @@ syscall_handler (struct intr_frame *f UNUSED) {
 		// break;
 
 	}
-	//printf ("system call!\n");
-	//thread_exit ();
-}
-
-void
-exit_handler (int status) {
-	struct thread *t = thread_current();
-	t->exit_status = status;
-	printf("%s: exit(%d)\n", thread_name(), status); 
-	thread_exit ();
 }

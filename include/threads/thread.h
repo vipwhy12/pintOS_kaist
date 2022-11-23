@@ -117,6 +117,21 @@ struct thread {
 	/* Owned by thread.c. */
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
+
+	// struct semaphore fork_sema;	
+	// struct semaphore wait_sema;
+	// struct semaphore free_sema;
+
+	// struct thread* parent_process;
+	// struct list child_process_list;
+	// struct list_elem child_elem;
+
+	// struct file **fdTable;
+	// int fdIdx;
+	// struct file *running;
+
+	// int stdin_count;
+	// int stdin_count;
 };
 
 /* If false (default), use round-robin scheduler.

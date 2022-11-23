@@ -38,6 +38,7 @@
 #define USER_STACK 0x47480000
 
 /* Returns true if VADDR is a user virtual address. */
+/* 해당 주소가 커널 메모리 공간의 경계 KERN_BASE 보다 밑에 있는지를 확인한다. */
 #define is_user_vaddr(vaddr) (!is_kernel_vaddr((vaddr)))
 
 /* Returns true if VADDR is a kernel virtual address. */
