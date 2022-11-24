@@ -51,6 +51,12 @@ struct ELF64_PHDR {
    uint64_t p_align;
 };
 
+struct fork_arg {
+   struct thread *parent;
+   struct intr_frame *parent_if;
+   struct semaphore *dup_sema;
+};
+
 
 tid_t process_create_initd (const char *file_name);
 tid_t process_fork (const char *name, struct intr_frame *if_);

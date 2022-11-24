@@ -91,14 +91,15 @@ int sys_open_handler(char *filename){
 	struct file *file = filesys_open(filename);
 	if (!file)
 		return -1;
-	
 	file->inode->open_cnt += 1;
+	f_table[i] = file;
+
 	struct ELF ehdr;
 	if (file_read(file, &ehdr, sizeof ehdr) == sizeof ehdr && memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) == 0 && ehdr.e_type == 2 && ehdr.e_machine == 0x3E && ehdr.e_version == 1 && ehdr.e_phentsize == sizeof(struct Phdr) && ehdr.e_phnum <= 1024)
 	{
 		file_deny_write(file);
 	}
-	f_table[i] = file;
+	file->pos -= (sizeof(struct ELF));
 
 	return i;
 }
@@ -125,7 +126,6 @@ int sys_filesize_handler(int fd){
 	return file_length(f);
 }
 
-//fd의 file에 적힌 것을 buffer에 읽어온다.
 int sys_read_handler(int fd, void* buffer, unsigned size){
 	struct thread *curr = thread_current();
 	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
@@ -134,9 +134,6 @@ int sys_read_handler(int fd, void* buffer, unsigned size){
 		thread_exit();
 	}
 	struct file *f = curr->fd_table[fd];
-	if (!f->deny_write){
-		return file_read_at(f, buffer, size, f->pos-(sizeof (struct ELF) ));
-	}
 	return file_read(f, buffer, size);
 }
 
@@ -153,20 +150,15 @@ int sys_write_handler(int fd, void *buffer, unsigned size){
 		thread_exit();
 	}
 	struct file *f = curr->fd_table[fd];
-
-	if (!f->deny_write){
-		return file_write_at(f, buffer, size, f->pos-(sizeof (struct ELF)));
-	}
 	return file_write(f, buffer, size);
 }
 
-int sys_fork_handler(char *thread_name){
-	struct thread *curr = thread_current();
-	return process_fork(thread_name, &curr->tf);
+int sys_fork_handler(char *thread_name, struct intr_frame *f){
+	return process_fork(thread_name, f);
 }
 
 int sys_wait_handler(int pid){
-
+	return process_wait(pid);
 }
 
 int sys_exec_handler(char * filename){
@@ -216,7 +208,7 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = sys_write_handler(f->R.rdi, f->R.rsi, f->R.rdx);
 		break;
 	case SYS_FORK:
-		f->R.rax = sys_fork_handler(f->R.rdi);
+		f->R.rax = sys_fork_handler(f->R.rdi, f);
 		break;
 	case SYS_WAIT:
 		f->R.rax = sys_wait_handler(f->R.rdi);

@@ -21,6 +21,9 @@
         "intr-stubs.h": "c",
         "intrinsic.h": "c",
         "stdio.h": "c",
-        "syscall-nr.h": "c"
+        "syscall-nr.h": "c",
+        "stdbool.h": "c",
+        "malloc.h": "c",
+        "vaddr.h": "c"
     }
 }

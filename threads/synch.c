@@ -107,8 +107,8 @@ sema_up (struct semaphore *sema) {
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
-
-	old_level = intr_disable ();
+	// ASSERT(!list_empty(&sema->waiters));
+	old_level = intr_disable();
 
 	if (!list_empty (&sema->waiters)){
 		list_sort(&sema->waiters, cmp_priority, NULL);

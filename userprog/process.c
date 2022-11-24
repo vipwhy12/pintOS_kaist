@@ -17,10 +17,13 @@
 #include "threads/thread.h"
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
+#include "threads/malloc.h"
+#include "threads/synch.h"
 #include "intrinsic.h"
 #include "lib/string.h"
 #include "lib/stdio.h"
 #include "lib/user/syscall.h"
+
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -77,10 +80,27 @@ initd (void *f_name) {
 /* Clones the current process as `name`. Returns the new process's thread id, or
  * TID_ERROR if the thread cannot be created. */
 tid_t
-process_fork (const char *name, struct intr_frame *if_ UNUSED) {
+process_fork (const char *name, struct intr_frame *if_) {
    /* Clone current thread to new thread.*/
-   return thread_create (name,
-         PRI_DEFAULT, __do_fork, thread_current ());
+   struct semaphore *dup_sema = (struct semaphore *)malloc(sizeof(struct semaphore));
+   struct fork_arg *arg = (struct fork_arg *)malloc(sizeof(struct fork_arg));
+
+   arg->parent = (struct thread *)malloc(sizeof (struct thread));
+   memcpy(arg->parent, thread_current(), sizeof(struct thread));
+
+   arg->parent_if = (struct intr_frame *)malloc(sizeof(struct intr_frame));
+   memcpy(arg->parent_if, if_, sizeof(struct intr_frame));
+
+   // arg->dup_sema = (struct semaphore *)malloc(sizeof(struct semaphore));
+   arg->dup_sema = dup_sema;
+   // memcpy(arg->dup_sema, dup_sema, sizeof(struct semaphore));
+   sema_init(arg->dup_sema, 0);
+
+   int result = thread_create(name, PRI_DEFAULT, __do_fork, arg);
+
+   sema_down(arg->dup_sema);
+
+   return result;
 }
 
 #ifndef VM
@@ -95,21 +115,28 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
    bool writable;
 
    /* 1. TODO: If the parent_page is kernel page, then return immediately. */
+   if (is_kernel_vaddr(va))
+      return true;
 
    /* 2. Resolve VA from the parent's page map level 4. */
    parent_page = pml4_get_page (parent->pml4, va);
 
    /* 3. TODO: Allocate new PAL_USER page for the child and set result to
     *    TODO: NEWPAGE. */
+   newpage = palloc_get_page(PAL_USER | PAL_ZERO);
 
    /* 4. TODO: Duplicate parent's page to the new page and
     *    TODO: check whether parent's page is writable or not (set WRITABLE
     *    TODO: according to the result). */
+   memcpy(newpage, parent_page, PGSIZE);
+   if (is_writable(pte)) writable = true;
 
    /* 5. Add new page to child's page table at address VA with WRITABLE
     *    permission. */
    if (!pml4_set_page (current->pml4, va, newpage, writable)) {
       /* 6. TODO: if fail to insert page, do error handling. */
+      current->process_status = -1;
+      thread_exit();
    }
    return true;
 }
@@ -121,21 +148,22 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       this function. */
 static void
 __do_fork (void *aux) {
-   struct intr_frame if_;
-   struct thread *parent = (struct thread *) aux;
-   struct thread *current = thread_current ();
+   // struct intr_frame if_;
+   struct thread *parent = ((struct fork_arg *) aux)->parent;
+   struct thread *current = thread_current (); //자식
+   struct intr_frame if_ = current->tf;
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-  
-   struct intr_frame *parent_if = &parent->tf;
+   struct intr_frame *parent_if = ((struct fork_arg *) aux)->parent_if;
+   struct semaphore *dup_sema = ((struct fork_arg *) aux)->dup_sema;
    bool succ = true;
-
    /* 1. Read the cpu context to local stack. */
    memcpy (&if_, parent_if, sizeof (struct intr_frame));
 
    /* 2. Duplicate PT */
    current->pml4 = pml4_create();
-   if (current->pml4 == NULL)
+   if (current->pml4 == NULL){
       goto error;
+   }
 
    process_activate (current);
 #ifdef VM
@@ -143,8 +171,9 @@ __do_fork (void *aux) {
    if (!supplemental_page_table_copy (&current->spt, &parent->spt))
       goto error;
 #else
-   if (!pml4_for_each (parent->pml4, duplicate_pte, parent))
+   if (!pml4_for_each (parent->pml4, duplicate_pte, parent)){
       goto error;
+   }
 #endif
 
    /* TODO: Your code goes here.
@@ -152,7 +181,6 @@ __do_fork (void *aux) {
     * TODO:       in include/filesys/file.h. Note that parent should not return
     * TODO:       from the fork() until this function successfully duplicates
     * TODO:       the resources of parent.*/
-   // memcpy (&current->tf, &if_, sizeof (struct intr_frame));
 
    for (int fd = 3; fd < 10; fd++){
       if (parent->fd_table[fd]){
@@ -162,13 +190,28 @@ __do_fork (void *aux) {
       }
    }
 
+   if_.R.rax = 0;
    process_init();
 
    /* Finally, switch to the newly created process. */
-   if (succ)
-      do_iret (&if_);
+   if (succ){
+      printf("HIHI\n");
+      free(parent);
+      free(parent_if);
+      free(aux);
+      ASSERT(!list_empty(&dup_sema->waiters));
+      sema_up(dup_sema);
+      free(dup_sema);
+      do_iret(&if_);
+   }
 error:
-   thread_exit ();
+   free(parent);
+   free(parent_if);
+   free(aux);
+   ASSERT(!list_empty(&dup_sema->waiters));
+   sema_up(dup_sema);
+   free(dup_sema);
+   thread_exit();
 }
 
 /* Switch the current execution context to the f_name.
@@ -196,9 +239,6 @@ process_exec (void *f_name) {
    palloc_free_page (file_name);
    if (!success)
       return -1;
-
-   // hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
-
 
    /* Start switched process. */
    do_iret (&_if);
@@ -228,7 +268,8 @@ process_wait (tid_t child_tid) {
       b_ptr = destruction_req_contains(child_tid);
       intr_set_level(old_level);
    }
-   
+   // thread_set_priority(PRI_DEFAULT - 1);
+
    return -1;
 }
 
@@ -422,7 +463,6 @@ load (const char *file_name, struct intr_frame *if_) {
             goto done;
          case PT_LOAD:
             if (validate_segment (&phdr, file)) {
-               // bool writable = (ehdr.e_type == 4) != 0;
                bool writable = (phdr.p_flags && PF_W) != 0;
                uint64_t file_page = phdr.p_offset & ~PGMASK;
                uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
@@ -494,12 +534,6 @@ load (const char *file_name, struct intr_frame *if_) {
 
    // step 1-2. Push a fake "return address"
    memset(if_->rsp - 8, 0, sizeof(void *));
-
-   
-   // hex_dump(if_->rsp, if_->rsp, sum, true);
-   // if (ehdr.e_type == 4){
-   //    file->deny_write = true;
-   // }
 
    success = true;
 

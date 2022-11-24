@@ -143,6 +143,10 @@ page_fault (struct intr_frame *f) {
 		thread_current()->process_status = -1;
 		thread_exit();
 	}
+	if(write) {
+		thread_current()->process_status = -1;
+		thread_exit();
+	}
 
 	
 #ifdef VM
