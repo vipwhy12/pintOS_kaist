@@ -14,6 +14,8 @@
 #include "filesys/inode.h"
 #include "threads/synch.h"
 #include "userprog/process.h"
+#include "lib/string.h"
+#include "threads/palloc.h"
 
 
 void syscall_entry (void);
@@ -93,14 +95,6 @@ int sys_open_handler(char *filename){
 		return -1;
 	file->inode->open_cnt += 1;
 	f_table[i] = file;
-
-	struct ELF ehdr;
-	if (file_read(file, &ehdr, sizeof ehdr) == sizeof ehdr && memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) == 0 && ehdr.e_type == 2 && ehdr.e_machine == 0x3E && ehdr.e_version == 1 && ehdr.e_phentsize == sizeof(struct Phdr) && ehdr.e_phnum <= 1024)
-	{
-		file_deny_write(file);
-	}
-	file->pos -= (sizeof(struct ELF));
-
 	return i;
 }
 
@@ -121,7 +115,7 @@ int sys_close_handler(int fd){
 
 int sys_filesize_handler(int fd){
 	struct thread *curr = thread_current();
-	struct thread **f_table = curr->fd_table;
+	struct file **f_table = curr->fd_table;
 	struct file *f = f_table[fd];
 	return file_length(f);
 }
@@ -161,16 +155,30 @@ int sys_wait_handler(int pid){
 	return process_wait(pid);
 }
 
-int sys_exec_handler(char * filename){
+int sys_exec_handler(char * cmd_line){
 	struct thread *curr = thread_current();
-	if (!(filename
-			&& is_user_vaddr(filename)
-		  	&& pml4_get_page(curr->pml4, filename)))
+	if (!(cmd_line
+			&& is_user_vaddr(cmd_line)
+		  	&& pml4_get_page(curr->pml4, cmd_line)))
 	{
 		curr->my_exit_code = -1;
 		thread_exit();
 	}
-	return process_exec(filename);
+ 	char *fn_copy = palloc_get_page (0);
+	strlcpy (fn_copy, cmd_line, PGSIZE);
+	return process_exec(fn_copy);
+}
+
+void 
+sys_seek_handler(int fd, unsigned position){
+	struct thread *curr = thread_current ();
+	struct file **f_table = curr->fd_table;
+	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL) {
+		curr->my_exit_code = -1;
+		thread_exit();
+	}
+	struct file *f = f_table[fd];
+	file_seek(f, position);
 }
 
 /* The main system call interface */
@@ -214,8 +222,12 @@ syscall_handler (struct intr_frame *f) {
 		f->R.rax = sys_wait_handler(f->R.rdi);
 		break;
 	case SYS_EXEC:
-		f->R.rax = sys_exec_handler(f->R.rdi);
+		sys_exec_handler(f->R.rdi);
 		break;
+	case SYS_SEEK:
+		sys_seek_handler(f->R.rdi,f->R.rsi);
+		break;
+	
 	default:
 		break;
 	}

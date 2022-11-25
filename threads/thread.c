@@ -701,7 +701,7 @@ destruction_req_contains(tid_t child_tid){
 				return thread->my_exit_code;
 		}
 	}
-	return -2;
+	return ERROR_EXIT2;
 }
 
 int 

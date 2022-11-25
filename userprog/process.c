@@ -55,6 +55,8 @@ process_create_initd (const char *file_name) {
    if (fn_copy == NULL)
       return TID_ERROR;
    strlcpy (fn_copy, file_name, PGSIZE);
+   char *tmp;
+   file_name = strtok_r(file_name, " ", &tmp);
 
    /* Create a new thread to execute FILE_NAME. */
    tid = thread_create (file_name, PRI_DEFAULT, initd, fn_copy);
@@ -83,7 +85,6 @@ tid_t
 process_fork (const char *name, struct intr_frame *if_) {
    /* Clone current thread to new thread.*/
    struct semaphore *dup_sema = (struct semaphore *)malloc(sizeof(struct semaphore));
-   
    struct fork_arg *arg = (struct fork_arg *)malloc(sizeof(struct fork_arg));
 
    arg->parent = thread_current();
@@ -94,9 +95,10 @@ process_fork (const char *name, struct intr_frame *if_) {
    arg->dup_sema = dup_sema;
    sema_init(arg->dup_sema, 0);
 
-   int result = thread_create(name, PRI_DEFAULT, __do_fork, arg);
+   tid_t child_tid = thread_create(name, PRI_DEFAULT, __do_fork, arg);
    sema_down(arg->dup_sema);
-   return result;
+   free(dup_sema);
+   return child_tid;
 }
 
 #ifndef VM
@@ -145,19 +147,18 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
 static void
 __do_fork (void *aux) {
    struct intr_frame if_;
+   struct thread *current = thread_current();
    struct thread *parent = ((struct fork_arg *) aux)->parent;
    struct intr_frame *parent_if = ((struct fork_arg *) aux)->parent_if;
    struct semaphore *dup_sema = ((struct fork_arg *) aux)->dup_sema;
+   bool succ = true;
 
-   struct thread *current = thread_current();
    // struct intr_frame if_ = current->tf;
-
    current->my_parent = parent;
    parent->my_child = current;
 
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
-   
-   bool succ = true;
+
    /* 1. Read the cpu context to local stack. */
    memcpy (&if_, parent_if, sizeof (struct intr_frame));
 
@@ -199,21 +200,20 @@ __do_fork (void *aux) {
 
    /* Finally, switch to the newly created process. */
    if (succ){
-      // free(parent_if);
       ASSERT(!list_empty(&dup_sema->waiters));
       sema_up(dup_sema);
+      free(parent_if);
       // free(dup_sema);
-      // free(aux);
+      free(aux);
       do_iret(&if_);
       
    }
 error:
-   // free(parent_if);
    ASSERT(!list_empty(&dup_sema->waiters));
-   // thread_yield();
    sema_up(dup_sema);
+   free(parent_if);
    // free(dup_sema);
-   // free(aux);
+   free(aux);
    thread_exit();
 }
 
@@ -233,11 +233,10 @@ process_exec (void *f_name) {
    _if.eflags = FLAG_IF | FLAG_MBS;
 
    /* We first kill the current context */
-   process_cleanup ();
+   process_cleanup();
 
    /* And then load the binary */
    success = load (file_name, &_if);
-
    /* If load failed, quit. */
    palloc_free_page (file_name);
    if (!success)
@@ -263,39 +262,36 @@ process_wait (tid_t child_tid) {
    /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
     * XXX:       to add infinite loop here before
     * XXX:       implementing the process_wait. */
-
+   int result = ERROR_EXIT2;
    struct thread *curr = thread_current();
    if (curr->tid == 1)
    {
-      int b_ptr = -2;
-      while (b_ptr == -2)
+      int b_ptr = ERROR_EXIT2;
+      while (b_ptr == ERROR_EXIT2)
       {  enum intr_level old_level;
          old_level = intr_disable ();
          b_ptr = destruction_req_contains(child_tid);
-         
          intr_set_level(old_level);
       }
    }else{
-      while(curr->my_child){
+      if (curr->child_exit_code == ERROR_EXIT2)
+         return -1;
+      while (curr->my_child)
+      {
          continue;
       }
    }
-   // while(curr->my_child){
-   //       continue;
-   // }
-   
-   return curr->child_exit_code;
+   result = curr->child_exit_code;
+   curr->child_exit_code = ERROR_EXIT2;
+   return result;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
    struct thread *curr = thread_current ();
-   if (curr->my_parent != NULL && curr->my_parent->tid > 0)
-   {
-      curr->my_parent->my_child = NULL;
-      curr->my_parent->child_exit_code = curr->my_exit_code;
-   }
+   curr->my_parent->my_child = NULL;
+   curr->my_parent->child_exit_code = curr->my_exit_code;
    /* TODO: Your code goes here.
     * TODO: Implement process termination message (see
     * TODO: project2/process_termination.html).
@@ -408,7 +404,6 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
-   // printf(">>>>>>>>>>>%s\n", file_name);
    struct thread *t = thread_current();
    struct ELF ehdr;
    struct file *file = NULL;
@@ -438,7 +433,7 @@ load (const char *file_name, struct intr_frame *if_) {
       argv[argc] = file_name;
       argc++;
    }
-   strlcpy(thread_current()->name, file_name, 16);
+   // strlcpy(thread_current()->name, file_name, 16);
    file = filesys_open(file_name);
    if (file == NULL) {
       printf ("load: %s: open failed\n", file_name);
@@ -559,7 +554,9 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
    /* We arrive here whether the load is successful or not. */
-   file_close (file);
+   // file_close (file);
+   if (file)
+      file_deny_write(file);
    return success;
 }
 
