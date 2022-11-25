@@ -442,7 +442,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 
 	t->child_exit_code = -1;
 	t->my_child = NULL;
-	t->my_parent = NULL;
+	t->my_parent = initial_thread;
 
 	for (int i = 3; i < 10; i++)
 	{

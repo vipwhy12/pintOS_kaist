@@ -272,10 +272,18 @@ process_wait (tid_t child_tid) {
       {  enum intr_level old_level;
          old_level = intr_disable ();
          b_ptr = destruction_req_contains(child_tid);
+         
          intr_set_level(old_level);
       }
+   }else{
+      while(curr->my_child){
+         continue;
+      }
    }
-
+   // while(curr->my_child){
+   //       continue;
+   // }
+   
    return curr->child_exit_code;
 }
 
@@ -285,6 +293,7 @@ process_exit (void) {
    struct thread *curr = thread_current ();
    if (curr->my_parent != NULL && curr->my_parent->tid > 0)
    {
+      curr->my_parent->my_child = NULL;
       curr->my_parent->child_exit_code = curr->my_exit_code;
    }
    /* TODO: Your code goes here.
