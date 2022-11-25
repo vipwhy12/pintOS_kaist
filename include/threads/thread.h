@@ -97,7 +97,7 @@ struct thread {
 	struct list donations;
 	struct list_elem donation_elem;
 
-	int process_status;
+	int my_exit_code;
 
 	int child_exit_code;
 	struct thread *my_child;

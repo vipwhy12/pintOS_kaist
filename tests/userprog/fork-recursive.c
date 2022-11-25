@@ -14,7 +14,7 @@ fork_and_wait (void){
 
   if (magic >= 10){
     exit(magic);
-  }
+  } 
 
   if ((pid = fork("child"))){
     magic++;

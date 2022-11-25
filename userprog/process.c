@@ -96,7 +96,6 @@ process_fork (const char *name, struct intr_frame *if_) {
 
    int result = thread_create(name, PRI_DEFAULT, __do_fork, arg);
    sema_down(arg->dup_sema);
-   // printf("AAAAA\n");
    return result;
 }
 
@@ -132,7 +131,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
     *    permission. */
    if (!pml4_set_page (current->pml4, va, newpage, writable)) {
       /* 6. TODO: if fail to insert page, do error handling. */
-      current->process_status = -1;
+      current->my_exit_code = -1;
       thread_exit();
    }
    return true;
@@ -276,14 +275,7 @@ process_wait (tid_t child_tid) {
          intr_set_level(old_level);
       }
    }
-   else
-   {
-      // printf("MY CHILD: %p %d\n", curr->my_child,curr->my_child->tid);
-      // while (!curr->my_child->zombie)
-      // {
-      //    continue;
-      // }
-   }
+
    return curr->child_exit_code;
 }
 
@@ -293,19 +285,14 @@ process_exit (void) {
    struct thread *curr = thread_current ();
    if (curr->my_parent != NULL && curr->my_parent->tid > 0)
    {
-      curr->my_parent->child_exit_code = curr->process_status;
-      // curr->zombie = true;
-      // printf("MY CODE: %d\n", curr->process_status);
-      // printf("MY BABY CODE: %d\n", curr->my_parent->child_exit_code);
-      // printf("your baby: %d\n", curr->my_parent->my_child->tid);
-      // printf("MY PARENT TID: %d\n", curr->my_parent->tid);
+      curr->my_parent->child_exit_code = curr->my_exit_code;
    }
    /* TODO: Your code goes here.
     * TODO: Implement process termination message (see
     * TODO: project2/process_termination.html).
     * TODO: We recommend you to implement process resource cleanup here. */
    if (curr->pml4 != NULL)
-      printf("%s: exit(%d)\n", curr->name, curr->process_status);
+      printf("%s: exit(%d)\n", curr->name, curr->my_exit_code);
    process_cleanup();
 }
 
@@ -412,6 +399,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
  * Returns true if successful, false otherwise. */
 static bool
 load (const char *file_name, struct intr_frame *if_) {
+   // printf(">>>>>>>>>>>%s\n", file_name);
    struct thread *t = thread_current();
    struct ELF ehdr;
    struct file *file = NULL;

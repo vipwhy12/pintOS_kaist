@@ -52,7 +52,7 @@ sys_halt_handler(){
 
 void
 sys_exit_handler(int arg1){
-	thread_current()->process_status = arg1;
+	thread_current()->my_exit_code = arg1;
 	thread_exit();
 }
 
@@ -62,7 +62,7 @@ bool sys_create_handler(char *filename, unsigned intial_size){
 			&& is_user_vaddr(filename)
 		  	&& pml4_get_page(curr->pml4, filename)))
 	{
-		curr->process_status = -1;
+		curr->my_exit_code = -1;
 		thread_exit();
 	}
 	return  filesys_create(filename, intial_size);
@@ -78,7 +78,7 @@ int sys_open_handler(char *filename){
 			&& is_user_vaddr(filename)
 		  	&& pml4_get_page(curr->pml4, filename)))
 	{
-		curr->process_status = -1;
+		curr->my_exit_code = -1;
 		thread_exit();
 	}
 	struct file **f_table = curr->fd_table;
@@ -107,14 +107,14 @@ int sys_open_handler(char *filename){
 int sys_close_handler(int fd){
 	struct file **f_table = thread_current()->fd_table;
 	if (fd < 3 || fd >= 10){
-		thread_current()->process_status = -1;
+		thread_current()->my_exit_code = -1;
 		thread_exit();
 	}
 	else if (f_table[fd]){
 		f_table[fd] == NULL;
 	}
 	else{
-		thread_current()->process_status = -1;
+		thread_current()->my_exit_code = -1;
 		thread_exit();
 	}
 }
@@ -130,7 +130,7 @@ int sys_read_handler(int fd, void* buffer, unsigned size){
 	struct thread *curr = thread_current();
 	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
 	{
-		thread_current()->process_status = -1;
+		thread_current()->my_exit_code = -1;
 		thread_exit();
 	}
 	struct file *f = curr->fd_table[fd];
@@ -146,7 +146,7 @@ int sys_write_handler(int fd, void *buffer, unsigned size){
 	}
 	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
 	{
-		curr->process_status = -1;
+		curr->my_exit_code = -1;
 		thread_exit();
 	}
 	struct file *f = curr->fd_table[fd];
@@ -167,7 +167,7 @@ int sys_exec_handler(char * filename){
 			&& is_user_vaddr(filename)
 		  	&& pml4_get_page(curr->pml4, filename)))
 	{
-		curr->process_status = -1;
+		curr->my_exit_code = -1;
 		thread_exit();
 	}
 	return process_exec(filename);

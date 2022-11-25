@@ -698,7 +698,7 @@ destruction_req_contains(tid_t child_tid){
 		for (list_elem; list_elem != list_end(&destruction_req); list_elem = list_next(list_elem)){
 			struct thread *thread = list_entry(list_elem, struct thread, elem);
 			if (thread->tid == child_tid)
-				return thread->process_status;
+				return thread->my_exit_code;
 		}
 	}
 	return -2;
