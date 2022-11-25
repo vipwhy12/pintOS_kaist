@@ -83,23 +83,20 @@ tid_t
 process_fork (const char *name, struct intr_frame *if_) {
    /* Clone current thread to new thread.*/
    struct semaphore *dup_sema = (struct semaphore *)malloc(sizeof(struct semaphore));
+   
    struct fork_arg *arg = (struct fork_arg *)malloc(sizeof(struct fork_arg));
 
-   arg->parent = (struct thread *)malloc(sizeof (struct thread));
-   memcpy(arg->parent, thread_current(), sizeof(struct thread));
+   arg->parent = thread_current();
 
    arg->parent_if = (struct intr_frame *)malloc(sizeof(struct intr_frame));
    memcpy(arg->parent_if, if_, sizeof(struct intr_frame));
 
-   // arg->dup_sema = (struct semaphore *)malloc(sizeof(struct semaphore));
    arg->dup_sema = dup_sema;
-   // memcpy(arg->dup_sema, dup_sema, sizeof(struct semaphore));
    sema_init(arg->dup_sema, 0);
 
    int result = thread_create(name, PRI_DEFAULT, __do_fork, arg);
-
    sema_down(arg->dup_sema);
-
+   // printf("AAAAA\n");
    return result;
 }
 
@@ -148,13 +145,19 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       this function. */
 static void
 __do_fork (void *aux) {
-   // struct intr_frame if_;
+   struct intr_frame if_;
    struct thread *parent = ((struct fork_arg *) aux)->parent;
-   struct thread *current = thread_current (); //자식
-   struct intr_frame if_ = current->tf;
-   /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
    struct intr_frame *parent_if = ((struct fork_arg *) aux)->parent_if;
    struct semaphore *dup_sema = ((struct fork_arg *) aux)->dup_sema;
+
+   struct thread *current = thread_current();
+   // struct intr_frame if_ = current->tf;
+
+   current->my_parent = parent;
+   parent->my_child = current;
+
+   /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
+   
    bool succ = true;
    /* 1. Read the cpu context to local stack. */
    memcpy (&if_, parent_if, sizeof (struct intr_frame));
@@ -192,25 +195,26 @@ __do_fork (void *aux) {
 
    if_.R.rax = 0;
    process_init();
+   memcpy (&current->tf, &if_, sizeof (struct intr_frame));
+
 
    /* Finally, switch to the newly created process. */
    if (succ){
-      printf("HIHI\n");
-      free(parent);
-      free(parent_if);
-      free(aux);
+      // free(parent_if);
       ASSERT(!list_empty(&dup_sema->waiters));
       sema_up(dup_sema);
-      free(dup_sema);
+      // free(dup_sema);
+      // free(aux);
       do_iret(&if_);
+      
    }
 error:
-   free(parent);
-   free(parent_if);
-   free(aux);
+   // free(parent_if);
    ASSERT(!list_empty(&dup_sema->waiters));
+   // thread_yield();
    sema_up(dup_sema);
-   free(dup_sema);
+   // free(dup_sema);
+   // free(aux);
    thread_exit();
 }
 
@@ -261,22 +265,41 @@ process_wait (tid_t child_tid) {
     * XXX:       to add infinite loop here before
     * XXX:       implementing the process_wait. */
 
-   bool b_ptr = false;
-   while (!b_ptr)
-   {  enum intr_level old_level;
-      old_level = intr_disable ();
-      b_ptr = destruction_req_contains(child_tid);
-      intr_set_level(old_level);
+   struct thread *curr = thread_current();
+   if (curr->tid == 1)
+   {
+      int b_ptr = -2;
+      while (b_ptr == -2)
+      {  enum intr_level old_level;
+         old_level = intr_disable ();
+         b_ptr = destruction_req_contains(child_tid);
+         intr_set_level(old_level);
+      }
    }
-   // thread_set_priority(PRI_DEFAULT - 1);
-
-   return -1;
+   else
+   {
+      // printf("MY CHILD: %p %d\n", curr->my_child,curr->my_child->tid);
+      // while (!curr->my_child->zombie)
+      // {
+      //    continue;
+      // }
+   }
+   return curr->child_exit_code;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
 void
 process_exit (void) {
    struct thread *curr = thread_current ();
+   if (curr->my_parent != NULL && curr->my_parent->tid > 0)
+   {
+      curr->my_parent->child_exit_code = curr->process_status;
+      // curr->zombie = true;
+      // printf("MY CODE: %d\n", curr->process_status);
+      // printf("MY BABY CODE: %d\n", curr->my_parent->child_exit_code);
+      // printf("your baby: %d\n", curr->my_parent->my_child->tid);
+      // printf("MY PARENT TID: %d\n", curr->my_parent->tid);
+   }
    /* TODO: Your code goes here.
     * TODO: Implement process termination message (see
     * TODO: project2/process_termination.html).

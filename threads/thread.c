@@ -440,6 +440,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
 
+	t->child_exit_code = -1;
+	t->my_child = NULL;
+	t->my_parent = NULL;
+
 	for (int i = 3; i < 10; i++)
 	{
 		t->fd_table[i] = NULL;
@@ -464,28 +468,30 @@ next_thread_to_run (void) {
 void
 do_iret (struct intr_frame *tf) {
 	__asm __volatile(
-			"movq %0, %%rsp\n"
-			"movq 0(%%rsp),%%r15\n"
-			"movq 8(%%rsp),%%r14\n"
-			"movq 16(%%rsp),%%r13\n"
-			"movq 24(%%rsp),%%r12\n"
-			"movq 32(%%rsp),%%r11\n"
-			"movq 40(%%rsp),%%r10\n"
-			"movq 48(%%rsp),%%r9\n"
-			"movq 56(%%rsp),%%r8\n"
-			"movq 64(%%rsp),%%rsi\n"
-			"movq 72(%%rsp),%%rdi\n"
-			"movq 80(%%rsp),%%rbp\n"
-			"movq 88(%%rsp),%%rdx\n"
-			"movq 96(%%rsp),%%rcx\n"
-			"movq 104(%%rsp),%%rbx\n"
-			"movq 112(%%rsp),%%rax\n"
-			"addq $120,%%rsp\n"
-			"movw 8(%%rsp),%%ds\n"
-			"movw (%%rsp),%%es\n"
-			"addq $32, %%rsp\n"
-			"iretq"
-			: : "g" ((uint64_t) tf) : "memory");
+		"movq %0, %%rsp\n"
+		"movq 0(%%rsp),%%r15\n"
+		"movq 8(%%rsp),%%r14\n"
+		"movq 16(%%rsp),%%r13\n"
+		"movq 24(%%rsp),%%r12\n"
+		"movq 32(%%rsp),%%r11\n"
+		"movq 40(%%rsp),%%r10\n"
+		"movq 48(%%rsp),%%r9\n"
+		"movq 56(%%rsp),%%r8\n"
+		"movq 64(%%rsp),%%rsi\n"
+		"movq 72(%%rsp),%%rdi\n"
+		"movq 80(%%rsp),%%rbp\n"
+		"movq 88(%%rsp),%%rdx\n"
+		"movq 96(%%rsp),%%rcx\n"
+		"movq 104(%%rsp),%%rbx\n"
+		"movq 112(%%rsp),%%rax\n"
+		"addq $120,%%rsp\n"
+		"movw 8(%%rsp),%%ds\n"
+		"movw (%%rsp),%%es\n"
+		"addq $32, %%rsp\n"
+		"iretq"
+		:
+		: "g"((uint64_t)tf)
+		: "memory");
 }
 
 /* Switching the thread by activating the new thread's page
@@ -683,7 +689,7 @@ is_readylist_empty(void){
 	return !list_empty(&ready_list) ? 0 : 1;
 }
 
-bool
+int
 destruction_req_contains(tid_t child_tid){
 	struct list_elem *list_elem;
 	if (!list_empty(&destruction_req))
@@ -692,12 +698,11 @@ destruction_req_contains(tid_t child_tid){
 		for (list_elem; list_elem != list_end(&destruction_req); list_elem = list_next(list_elem)){
 			struct thread *thread = list_entry(list_elem, struct thread, elem);
 			if (thread->tid == child_tid)
-				return true;
+				return thread->process_status;
 		}
 	}
-	return false;
+	return -2;
 }
-
 
 int 
 get_ready_list_max_priority(){

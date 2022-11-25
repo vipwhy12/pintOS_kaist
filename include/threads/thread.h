@@ -99,6 +99,10 @@ struct thread {
 
 	int process_status;
 
+	int child_exit_code;
+	struct thread *my_child;
+	struct thread *my_parent;
+
 	int64_t wakeup_tick;                /* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 	struct file* fd_table[10];          /* file descriptor(fd) table */
@@ -158,7 +162,7 @@ int64_t get_next_tick_to_awake(void);
 
 char is_readylist_empty(void);
 int get_ready_list_max_priority(void);
-bool destruction_req_contains(tid_t child_tid);
+int destruction_req_contains(tid_t child_tid);
 
 void test_max_priority(void);
 bool cmp_priority(const struct list_elem *a_, const struct list_elem *b_,
