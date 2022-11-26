@@ -448,7 +448,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&t->child_list);
 	t->my_info = NULL;
 
-	for (int i = 3; i < 10; i++)
+	for (int i = 3; i < FDLIMIT; i++)
 	{
 		t->fd_table[i] = NULL;
 	}

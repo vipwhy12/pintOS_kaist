@@ -85,7 +85,7 @@ int sys_open_handler(char *filename){
 	}
 	struct file **f_table = curr->fd_table;
 	int i = 3;
-	for (i; i < 10; i++)
+	for (i; i < FDLIMIT; i++)
 	{
 		if (f_table[i] == NULL)
 			break;
@@ -100,7 +100,7 @@ int sys_open_handler(char *filename){
 
 int sys_close_handler(int fd){
 	struct file **f_table = thread_current()->fd_table;
-	if (fd < 3 || fd >= 10){
+	if (fd < 3 || fd >= FDLIMIT){
 		thread_current()->my_exit_code = -1;
 		thread_exit();
 	}
@@ -122,7 +122,7 @@ int sys_filesize_handler(int fd){
 
 int sys_read_handler(int fd, void* buffer, unsigned size){
 	struct thread *curr = thread_current();
-	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
+	if (fd < 3 || fd >= FDLIMIT || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
 	{
 		thread_current()->my_exit_code = -1;
 		thread_exit();
@@ -138,7 +138,7 @@ int sys_write_handler(int fd, void *buffer, unsigned size){
 		putbuf(buffer, size);
 		return size;
 	}
-	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
+	if (fd < 3 || fd >= FDLIMIT || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
 	{
 		curr->my_exit_code = -1;
 		thread_exit();
@@ -173,7 +173,7 @@ void
 sys_seek_handler(int fd, unsigned position){
 	struct thread *curr = thread_current ();
 	struct file **f_table = curr->fd_table;
-	if (fd < 3 || fd >= 10 || curr->fd_table[fd] == NULL) {
+	if (fd < 3 || fd >= FDLIMIT || curr->fd_table[fd] == NULL) {
 		curr->my_exit_code = -1;
 		thread_exit();
 	}

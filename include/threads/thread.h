@@ -5,6 +5,7 @@
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -29,6 +30,7 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 #define ERROR_EXIT2 -2
+#define FDLIMIT 128
 
 /* A kernel thread or user process.
  *
@@ -92,6 +94,7 @@ struct child_info{
 	bool finished;
 	tid_t c_tid;
 	int c_exit_code;
+	struct semaphore c_sema;
 	struct list_elem c_elem;
 };
 
@@ -117,7 +120,7 @@ struct thread
 
 	int64_t wakeup_tick;                /* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	struct file* fd_table[10];          /* file descriptor(fd) table */
+	struct file* fd_table[FDLIMIT];          /* file descriptor(fd) table */
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

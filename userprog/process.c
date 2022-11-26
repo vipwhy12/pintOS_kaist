@@ -160,6 +160,7 @@ __do_fork (void *aux) {
    current->my_info->finished = false;
    current->my_info->c_tid = current->tid;
    current->my_info->c_exit_code = current->my_exit_code;
+   sema_init(&current->my_info->c_sema, 0);
    list_push_back(&parent->child_list, &my_info->c_elem);
 
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
@@ -190,7 +191,7 @@ __do_fork (void *aux) {
     * TODO:       from the fork() until this function successfully duplicates
     * TODO:       the resources of parent.*/
 
-   for (int fd = 3; fd < 10; fd++){
+   for (int fd = 3; fd < FDLIMIT; fd++){
       if (parent->fd_table[fd]){
          current->fd_table[fd] = file_duplicate(parent->fd_table[fd]);
       }else{
@@ -284,7 +285,7 @@ process_wait (tid_t child_tid) {
          c_info = list_entry(child_elem, struct child_info, c_elem);
          if(c_info->c_tid == child_tid){
             while(!c_info->finished){
-               continue;
+               sema_down(&c_info->c_sema);
             }
             result = c_info->c_exit_code;
             list_remove(child_elem);
@@ -294,8 +295,6 @@ process_wait (tid_t child_tid) {
          child_elem = list_next(child_elem);
       }
    }
-   // result = curr->child_exit_code;
-   // curr->child_exit_code = ERROR_EXIT2;
    return -1;
 }
 
@@ -312,6 +311,7 @@ process_exit (void) {
    if (curr->my_info){
       curr->my_info->c_exit_code = curr->my_exit_code;
       curr->my_info->finished = true;
+      sema_up(&curr->my_info->c_sema);
    }
 
    /* TODO: Your code goes here.
