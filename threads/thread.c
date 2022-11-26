@@ -209,6 +209,21 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	/* project2*/
+	t->fd_table = palloc_get_multiple(PAL_ZERO, FDT_PAGES);
+	if(t->fd_table == NULL){
+		return TID_ERROR;
+	}
+
+	t->fd_idx = 2;
+	/* stdin 자리 */ 
+	t->fd_table[0] = 1;
+	/* stout 자리 */
+	t->fd_table[1] = 2;
+
+	struct thread* curr = thread_current();
+  list_push_back(&curr->child_list, &t->child_list_elem);
+
 	/* Add to run queue. */
 	thread_unblock (t);
 
@@ -441,6 +456,16 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->wait_on_lock = NULL;
 	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
+
+	/*project 2 sema는 다운(0)하여 초기화*/
+	t->exit_status = 0;
+	list_init(&t->child_list);
+	sema_init(&t->fork_sema, 0);
+
+	t->is_waited = false;
+	sema_init(&t->wait_sema, 0);
+	sema_init(&t->free_sema, 0);
+
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
