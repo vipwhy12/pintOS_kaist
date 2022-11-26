@@ -440,10 +440,13 @@ init_thread (struct thread *t, const char *name, int priority) {
 	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
 
-	t->child_exit_code = -1;
-	t->my_child = NULL;
+	// t->child_exit_code = -1;
+	// t->my_child = NULL;
+	t->my_exit_code = -1;
 	t->my_parent = initial_thread;
 	t->my_file = NULL;
+	list_init(&t->child_list);
+	t->my_info = NULL;
 
 	for (int i = 3; i < 10; i++)
 	{

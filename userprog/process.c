@@ -153,9 +153,14 @@ __do_fork (void *aux) {
    struct semaphore *dup_sema = ((struct fork_arg *) aux)->dup_sema;
    bool succ = true;
 
-   // struct intr_frame if_ = current->tf;
+   // parent->my_child = current;
    current->my_parent = parent;
-   parent->my_child = current;
+   struct child_info *my_info = (struct child_info *)malloc(sizeof(struct child_info));
+   current->my_info = my_info;
+   current->my_info->finished = false;
+   current->my_info->c_tid = current->tid;
+   current->my_info->c_exit_code = current->my_exit_code;
+   list_push_back(&parent->child_list, &my_info->c_elem);
 
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 
@@ -203,7 +208,6 @@ __do_fork (void *aux) {
       ASSERT(!list_empty(&dup_sema->waiters));
       sema_up(dup_sema);
       free(parent_if);
-      // free(dup_sema);
       free(aux);
       do_iret(&if_);
       
@@ -212,7 +216,6 @@ error:
    ASSERT(!list_empty(&dup_sema->waiters));
    sema_up(dup_sema);
    free(parent_if);
-   // free(dup_sema);
    free(aux);
    thread_exit();
 }
@@ -262,7 +265,7 @@ process_wait (tid_t child_tid) {
    /* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
     * XXX:       to add infinite loop here before
     * XXX:       implementing the process_wait. */
-   int result = ERROR_EXIT2;
+   int result;
    struct thread *curr = thread_current();
    if (curr->tid == 1)
    {
@@ -274,16 +277,26 @@ process_wait (tid_t child_tid) {
          intr_set_level(old_level);
       }
    }else{
-      if (curr->child_exit_code == ERROR_EXIT2)
-         return -1;
-      while (curr->my_child)
+      struct list_elem *child_elem = list_begin(&curr->child_list);
+      struct child_info *c_info;
+      while (child_elem != list_end(&curr->child_list))
       {
-         continue;
+         c_info = list_entry(child_elem, struct child_info, c_elem);
+         if(c_info->c_tid == child_tid){
+            while(!c_info->finished){
+               continue;
+            }
+            result = c_info->c_exit_code;
+            list_remove(child_elem);
+            free(c_info);
+            return result;
+         }
+         child_elem = list_next(child_elem);
       }
    }
-   result = curr->child_exit_code;
-   curr->child_exit_code = ERROR_EXIT2;
-   return result;
+   // result = curr->child_exit_code;
+   // curr->child_exit_code = ERROR_EXIT2;
+   return -1;
 }
 
 /* Exit the process. This function is called by thread_exit (). */
@@ -294,8 +307,13 @@ process_exit (void) {
       file_close(curr->my_file);
       curr->my_file = NULL;
    }
-   curr->my_parent->my_child = NULL;
-   curr->my_parent->child_exit_code = curr->my_exit_code;
+   // curr->my_parent->my_child = NULL;
+   // curr->my_parent->child_exit_code = curr->my_exit_code;
+   if (curr->my_info){
+      curr->my_info->c_exit_code = curr->my_exit_code;
+      curr->my_info->finished = true;
+   }
+
    /* TODO: Your code goes here.
     * TODO: Implement process termination message (see
     * TODO: project2/process_termination.html).

@@ -87,23 +87,32 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
-struct thread {
+
+struct child_info{
+	bool finished;
+	tid_t c_tid;
+	int c_exit_code;
+	struct list_elem c_elem;
+};
+
+struct thread
+{
 	/* Owned by thread.c. */
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. 4가지 : ready, blocked, running, dying*/
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-
 	int init_priority;
+	int my_exit_code;
+	int child_exit_code;
+
 	struct lock* wait_on_lock;
 	struct list donations;
 	struct list_elem donation_elem;
 
-	int my_exit_code;
-	int child_exit_code;
-	struct thread *my_child;
 	struct thread *my_parent;
-
+	struct list child_list;
+	struct child_info *my_info;
 	struct file *my_file;
 
 	int64_t wakeup_tick;                /* Shared between thread.c and synch.c. */
