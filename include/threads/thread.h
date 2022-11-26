@@ -100,10 +100,11 @@ struct thread {
 	struct list_elem donation_elem;
 
 	int my_exit_code;
-
 	int child_exit_code;
 	struct thread *my_child;
 	struct thread *my_parent;
+
+	struct file *my_file;
 
 	int64_t wakeup_tick;                /* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */

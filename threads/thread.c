@@ -443,6 +443,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->child_exit_code = -1;
 	t->my_child = NULL;
 	t->my_parent = initial_thread;
+	t->my_file = NULL;
 
 	for (int i = 3; i < 10; i++)
 	{

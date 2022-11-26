@@ -290,6 +290,10 @@ process_wait (tid_t child_tid) {
 void
 process_exit (void) {
    struct thread *curr = thread_current ();
+   if (curr->my_file){
+      file_close(curr->my_file);
+      curr->my_file = NULL;
+   }
    curr->my_parent->my_child = NULL;
    curr->my_parent->child_exit_code = curr->my_exit_code;
    /* TODO: Your code goes here.
@@ -433,7 +437,6 @@ load (const char *file_name, struct intr_frame *if_) {
       argv[argc] = file_name;
       argc++;
    }
-   // strlcpy(thread_current()->name, file_name, 16);
    file = filesys_open(file_name);
    if (file == NULL) {
       printf ("load: %s: open failed\n", file_name);
@@ -554,9 +557,13 @@ load (const char *file_name, struct intr_frame *if_) {
 
 done:
    /* We arrive here whether the load is successful or not. */
-   // file_close (file);
-   if (file)
-      file_deny_write(file);
+   if (file){
+      if (thread_current()->my_file){
+         file_close(thread_current()->my_file);
+      }
+      thread_current()->my_file = file;
+      file_deny_write(thread_current()->my_file);
+   }
    return success;
 }
 
