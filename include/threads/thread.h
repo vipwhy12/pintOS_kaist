@@ -1,16 +1,14 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
-#define USERPROG
-
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
 #include "threads/interrupt.h"
+#include "threads/synch.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
-
 
 /* States in a thread's life cycle. */
 enum thread_status {
@@ -29,6 +27,12 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* project2 */
+#define FDT_PAGES 3
+#define MAX_FD_NUM (1<<9)
+#define STDOUT_FILENO 1
+#define STDIN_FILENO 0
 
 /* A kernel thread or user process.
  *
@@ -95,15 +99,29 @@ struct thread {
 	int priority;                       /* Priority. */
 
 	int init_priority;
-	struct lock* wait_on_lock;
+	struct lock* wait_on_lock;					
 	struct list donations;
 	struct list_elem donation_elem;
 
 	int64_t wakeup_tick;
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
-	int exit_status;
 	
+	/* project2 : SYSTEMCALL */
+	int exit_status;
+	struct file ** fd_table;
+	int fd_idx;
+
+	struct semaphore fork_sema;
+	struct semaphore wait_sema;
+	struct semaphore free_sema;
+
+	struct intr_frame parent_if;
+	struct list child_list;
+	struct list_elem child_list_elem;
+
+	bool is_waited;
+
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -118,20 +136,6 @@ struct thread {
 	struct intr_frame tf;               /* Information for switching */
 	unsigned magic;                     /* Detects stack overflow. */
 
-	// struct semaphore fork_sema;	
-	// struct semaphore wait_sema;
-	// struct semaphore free_sema;
-
-	// struct thread* parent_process;
-	// struct list child_process_list;
-	// struct list_elem child_elem;
-
-	// struct file **fdTable;
-	// int fdIdx;
-	// struct file *running;
-
-	// int stdin_count;
-	// int stdin_count;
 };
 
 /* If false (default), use round-robin scheduler.
