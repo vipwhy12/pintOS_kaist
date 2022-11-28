@@ -209,6 +209,15 @@ thread_create (const char *name, int priority,
 	t->tf.cs = SEL_KCSEG;
 	t->tf.eflags = FLAG_IF;
 
+	t->my_parent = thread_current ();
+	struct child_info *my_info = (struct child_info *) malloc(sizeof (struct child_info));
+	t->my_info = my_info;
+	t->my_info->finished = false;
+    t->my_info->c_tid = t->tid;
+    t->my_info->c_exit_code = t->my_exit_code;
+    sema_init(&t->my_info->c_sema, 0);
+	list_push_back(&thread_current ()->child_list, &my_info->c_elem);
+
 	/* Add to run queue. */
 	thread_unblock (t);
 

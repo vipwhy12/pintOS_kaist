@@ -162,14 +162,14 @@ __do_fork (void **aux) {
    bool succ = true;
 
 
-   current->my_parent = parent;
-   struct child_info *my_info = (struct child_info *)malloc(sizeof(struct child_info));
-   current->my_info = my_info;
-   current->my_info->finished = false;
-   current->my_info->c_tid = current->tid;
-   current->my_info->c_exit_code = current->my_exit_code;
-   sema_init(&current->my_info->c_sema, 0);
-   list_push_back(&parent->child_list, &my_info->c_elem);
+   // current->my_parent = parent;
+   // struct child_info *my_info = (struct child_info *)malloc(sizeof(struct child_info));
+   // current->my_info = my_info;
+   // current->my_info->finished = false;
+   // current->my_info->c_tid = current->tid;
+   // current->my_info->c_exit_code = current->my_exit_code;
+   // sema_init(&current->my_info->c_sema, 0);
+   // list_push_back(&parent->child_list, &my_info->c_elem);
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 
    /* 1. Read the cpu context to local stack. */
@@ -270,33 +270,51 @@ process_wait (tid_t child_tid) {
     * XXX:       implementing the process_wait. */
    int result;
    struct thread *curr = thread_current();
-   if (curr->tid == 1)
+   // if (curr->tid == 1)
+   // {
+   //    int b_ptr = ERROR_EXIT2;
+   //    while (b_ptr == ERROR_EXIT2)
+   //    {  enum intr_level old_level;
+   //       old_level = intr_disable ();
+   //       b_ptr = destruction_req_contains(child_tid);
+   //       intr_set_level(old_level);
+   //    }
+   // }else{
+   //    struct list_elem *child_elem = list_begin(&curr->child_list);
+   //    struct child_info *c_info;
+   //    while (child_elem != list_end(&curr->child_list))
+   //    {
+   //       c_info = list_entry(child_elem, struct child_info, c_elem);
+   //       if(c_info->c_tid == child_tid){
+   //          while(!c_info->finished){
+   //             sema_down(&c_info->c_sema);
+   //          }
+   //          result = c_info->c_exit_code;
+   //          list_remove(child_elem);
+   //          free(c_info);
+   //          c_info == NULL;
+   //          return result;
+   //       }
+   //       child_elem = list_next(child_elem);
+   //    }
+   // }
+
+   struct list_elem *child_elem = list_begin(&curr->child_list);
+   struct child_info *c_info;
+   while (child_elem != list_end(&curr->child_list))
    {
-      int b_ptr = ERROR_EXIT2;
-      while (b_ptr == ERROR_EXIT2)
-      {  enum intr_level old_level;
-         old_level = intr_disable ();
-         b_ptr = destruction_req_contains(child_tid);
-         intr_set_level(old_level);
-      }
-   }else{
-      struct list_elem *child_elem = list_begin(&curr->child_list);
-      struct child_info *c_info;
-      while (child_elem != list_end(&curr->child_list))
-      {
-         c_info = list_entry(child_elem, struct child_info, c_elem);
-         if(c_info->c_tid == child_tid){
-            while(!c_info->finished){
-               sema_down(&c_info->c_sema);
-            }
-            result = c_info->c_exit_code;
-            list_remove(child_elem);
-            free(c_info);
-            c_info == NULL;
-            return result;
+      c_info = list_entry(child_elem, struct child_info, c_elem);
+      if(c_info->c_tid == child_tid){
+         while(!c_info->finished){
+            sema_down(&c_info->c_sema);
          }
-         child_elem = list_next(child_elem);
+         result = c_info->c_exit_code;
+         list_remove(child_elem);
+         free(c_info);
+         c_info == NULL;
+         return result;
       }
+      child_elem = list_next(child_elem);
    }
    return -1;
 }

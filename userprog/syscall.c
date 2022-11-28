@@ -138,7 +138,9 @@ int sys_filesize_handler(int fd){
 	struct thread *curr = thread_current();
 	struct file **f_table = curr->fd_table;
 	struct file *f = f_table[fd]; 
-	result = file_length(f);
+	lock_acquire(&filesys_lock);
+	result =  file_length(f);
+	lock_release(&filesys_lock);
 	return result;
 }
 
@@ -208,7 +210,10 @@ sys_seek_handler(int fd, unsigned position){
 		thread_exit();
 	}
 	struct file *f = f_table[fd];
+	lock_acquire(&filesys_lock);
 	file_seek(f, position);
+	lock_release(&filesys_lock);
+	
 }
 
 /* The main system call interface */
