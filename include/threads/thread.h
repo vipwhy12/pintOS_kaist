@@ -30,7 +30,8 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 #define ERROR_EXIT2 -2
-#define FDLIMIT 128
+#define FDBASE 2
+#define FDLIMIT 32
 
 /* A kernel thread or user process.
  *
@@ -94,8 +95,8 @@ struct child_info{
 	bool finished;
 	tid_t c_tid;
 	int c_exit_code;
-	struct semaphore c_sema;
 	struct list_elem c_elem;
+	struct semaphore c_sema;
 };
 
 struct thread
@@ -104,23 +105,21 @@ struct thread
 	tid_t tid;                          /* Thread identifier. */
 	enum thread_status status;          /* Thread state. 4가지 : ready, blocked, running, dying*/
 	char name[16];                      /* Name (for debugging purposes). */
+	int my_exit_code;
 	int priority;                       /* Priority. */
 	int init_priority;
-	int my_exit_code;
-	int child_exit_code;
 
+	bool abc;
+	int64_t wakeup_tick; /* Shared between thread.c and synch.c. */
 	struct lock* wait_on_lock;
-	struct list donations;
-	struct list_elem donation_elem;
-
 	struct thread *my_parent;
-	struct list child_list;
-	struct child_info *my_info;
 	struct file *my_file;
-
-	int64_t wakeup_tick;                /* Shared between thread.c and synch.c. */
-	struct list_elem elem;              /* List element. */
+	struct child_info *my_info;
 	struct file* fd_table[FDLIMIT];          /* file descriptor(fd) table */
+	struct list_elem donation_elem;
+	struct list_elem elem;              /* List element. */
+	struct list child_list;
+	struct list donations;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */

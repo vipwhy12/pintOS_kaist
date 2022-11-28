@@ -24,6 +24,7 @@
         "syscall-nr.h": "c",
         "stdbool.h": "c",
         "malloc.h": "c",
-        "vaddr.h": "c"
+        "vaddr.h": "c",
+        "vm.h": "c"
     }
 }

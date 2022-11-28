@@ -45,6 +45,8 @@ syscall_init (void) {
 	 * mode stack. Therefore, we masked the FLAG_FL. */
 	write_msr(MSR_SYSCALL_MASK,
 			FLAG_IF | FLAG_TF | FLAG_DF | FLAG_IOPL | FLAG_AC | FLAG_NT);
+
+	lock_init(&filesys_lock);
 }
 
 void
@@ -59,6 +61,7 @@ sys_exit_handler(int arg1){
 }
 
 bool sys_create_handler(char *filename, unsigned intial_size){
+	bool result;
 	struct thread *curr = thread_current();
 	if (!(filename 
 			&& is_user_vaddr(filename)
@@ -67,14 +70,22 @@ bool sys_create_handler(char *filename, unsigned intial_size){
 		curr->my_exit_code = -1;
 		thread_exit();
 	}
-	return  filesys_create(filename, intial_size);
+	lock_acquire(&filesys_lock);
+	result = filesys_create(filename, intial_size);
+	lock_release(&filesys_lock);
+	return result;
 }
 
 bool sys_remove_handler(char *filename){
-	return filesys_remove(filename);
-} 
+	bool result;
+	lock_acquire(&filesys_lock);
+	result = filesys_remove(filename);
+	lock_release(&filesys_lock);
+	return result;
+}
 
 int sys_open_handler(char *filename){
+	// return -1;
 	struct thread *curr = thread_current();
 	if (!(filename
 			&& is_user_vaddr(filename)
@@ -83,29 +94,38 @@ int sys_open_handler(char *filename){
 		curr->my_exit_code = -1;
 		thread_exit();
 	}
-	struct file **f_table = curr->fd_table;
-	int i = 3;
-	for (i; i < FDLIMIT; i++)
-	{
-		if (f_table[i] == NULL)
-			break;
-	}
+	lock_acquire(&filesys_lock);
 	struct file *file = filesys_open(filename);
+	lock_release(&filesys_lock);
 	if (!file)
 		return -1;
-	file->inode->open_cnt += 1;
-	f_table[i] = file;
-	return i;
+
+	struct file **f_table = curr->fd_table;
+	int i = FDBASE;
+	for (i; i < FDLIMIT; i++)
+	{
+		if (f_table[i] == NULL){
+			f_table[i] = file;
+			return i;
+		}
+	}
+	lock_acquire(&filesys_lock);
+	file_close(file);
+	lock_release(&filesys_lock);
+	return -1;
 }
 
 int sys_close_handler(int fd){
 	struct file **f_table = thread_current()->fd_table;
-	if (fd < 3 || fd >= FDLIMIT){
+	if (fd < FDBASE || fd >= FDLIMIT){
 		thread_current()->my_exit_code = -1;
 		thread_exit();
 	}
 	else if (f_table[fd]){
-		f_table[fd] == NULL;
+		lock_acquire(&filesys_lock);
+		file_close(f_table[fd]);
+		lock_release(&filesys_lock);
+		f_table[fd] = NULL;
 	}
 	else{
 		thread_current()->my_exit_code = -1;
@@ -114,37 +134,47 @@ int sys_close_handler(int fd){
 }
 
 int sys_filesize_handler(int fd){
+	int result;
 	struct thread *curr = thread_current();
 	struct file **f_table = curr->fd_table;
-	struct file *f = f_table[fd];
-	return file_length(f);
+	struct file *f = f_table[fd]; 
+	result = file_length(f);
+	return result;
 }
 
 int sys_read_handler(int fd, void* buffer, unsigned size){
 	struct thread *curr = thread_current();
-	if (fd < 3 || fd >= FDLIMIT || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
+	int result;
+	if (fd < FDBASE || fd >= FDLIMIT || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer))
 	{
 		thread_current()->my_exit_code = -1;
 		thread_exit();
 	}
 	struct file *f = curr->fd_table[fd];
-	return file_read(f, buffer, size);
+	lock_acquire(&filesys_lock);
+	result = file_read(f, buffer, size);
+	lock_release(&filesys_lock);
+	return result;
 }
 
 int sys_write_handler(int fd, void *buffer, unsigned size){
 	struct thread *curr = thread_current();
-
-	if (fd == 1){
+	int result;
+	if (fd == 1)
+	{
 		putbuf(buffer, size);
 		return size;
 	}
-	if (fd < 3 || fd >= FDLIMIT || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
+	if (fd < FDBASE || fd >= FDLIMIT || curr->fd_table[fd] == NULL || buffer == NULL || is_kernel_vaddr(buffer) || !pml4_get_page(curr->pml4, buffer)) 
 	{
 		curr->my_exit_code = -1;
 		thread_exit();
 	}
 	struct file *f = curr->fd_table[fd];
-	return file_write(f, buffer, size);
+	lock_acquire(&filesys_lock);
+	result = file_write(f, buffer, size);
+	lock_release(&filesys_lock);
+	return result;
 }
 
 int sys_fork_handler(char *thread_name, struct intr_frame *f){
@@ -173,7 +203,7 @@ void
 sys_seek_handler(int fd, unsigned position){
 	struct thread *curr = thread_current ();
 	struct file **f_table = curr->fd_table;
-	if (fd < 3 || fd >= FDLIMIT || curr->fd_table[fd] == NULL) {
+	if (fd < FDBASE || fd >= FDLIMIT || curr->fd_table[fd] == NULL) {
 		curr->my_exit_code = -1;
 		thread_exit();
 	}

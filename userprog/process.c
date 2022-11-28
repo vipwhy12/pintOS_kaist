@@ -1,4 +1,5 @@
 #include "userprog/process.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -31,7 +32,7 @@
 static void process_cleanup (void);
 static bool load (const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
-static void __do_fork (void *);
+static void __do_fork (void **);
 
 /* General process initializer for initd and other process. */
 static void
@@ -84,21 +85,28 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
    /* Clone current thread to new thread.*/
-   struct semaphore *dup_sema = (struct semaphore *)malloc(sizeof(struct semaphore));
-   struct fork_arg *arg = (struct fork_arg *)malloc(sizeof(struct fork_arg));
+   struct semaphore dup_sema;
+   struct thread *p_thread = thread_current();
+   void *arr[3] = {p_thread, if_, &dup_sema};
+   tid_t child_pid;
 
-   arg->parent = thread_current();
+   sema_init(&dup_sema, 0);
 
-   arg->parent_if = (struct intr_frame *)malloc(sizeof(struct intr_frame));
-   memcpy(arg->parent_if, if_, sizeof(struct intr_frame));
-
-   arg->dup_sema = dup_sema;
-   sema_init(arg->dup_sema, 0);
-
-   tid_t child_tid = thread_create(name, PRI_DEFAULT, __do_fork, arg);
-   sema_down(arg->dup_sema);
-   free(dup_sema);
-   return child_tid;
+   child_pid = thread_create(name, PRI_DEFAULT, __do_fork, arr);
+   // printf("내(%d)가 (%d)를 낳았다\n",p_thread->tid, child_pid);
+   if (child_pid != TID_ERROR)
+   {
+      sema_down(&dup_sema);
+      // 나의 childlist child-pid를 ㅊ자아서 그 애의 exit_code가 -1이면 -1를 리턴
+      if (p_thread -> abc == true){
+         return -1;
+      }
+      return child_pid;
+   }else{
+      // printf("실패ㅜㅜ");
+      return child_pid;
+   }
+   
 }
 
 #ifndef VM
@@ -133,8 +141,7 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
     *    permission. */
    if (!pml4_set_page (current->pml4, va, newpage, writable)) {
       /* 6. TODO: if fail to insert page, do error handling. */
-      current->my_exit_code = -1;
-      thread_exit();
+      return false;
    }
    return true;
 }
@@ -145,15 +152,16 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       That is, you are required to pass second argument of process_fork to
  *       this function. */
 static void
-__do_fork (void *aux) {
-   struct intr_frame if_;
+__do_fork (void **aux) {
+   // struct intr_frame if_;
+   struct thread *parent = (struct thread *)aux[0];
    struct thread *current = thread_current();
-   struct thread *parent = ((struct fork_arg *) aux)->parent;
-   struct intr_frame *parent_if = ((struct fork_arg *) aux)->parent_if;
-   struct semaphore *dup_sema = ((struct fork_arg *) aux)->dup_sema;
+   struct intr_frame if_ = current->tf;
+   struct intr_frame *parent_if = (struct intr_frame *)aux[1];
+   struct semaphore *dup_sema = (struct semaphore *)aux[2];
    bool succ = true;
 
-   // parent->my_child = current;
+
    current->my_parent = parent;
    struct child_info *my_info = (struct child_info *)malloc(sizeof(struct child_info));
    current->my_info = my_info;
@@ -162,7 +170,6 @@ __do_fork (void *aux) {
    current->my_info->c_exit_code = current->my_exit_code;
    sema_init(&current->my_info->c_sema, 0);
    list_push_back(&parent->child_list, &my_info->c_elem);
-
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 
    /* 1. Read the cpu context to local stack. */
@@ -191,7 +198,7 @@ __do_fork (void *aux) {
     * TODO:       from the fork() until this function successfully duplicates
     * TODO:       the resources of parent.*/
 
-   for (int fd = 3; fd < FDLIMIT; fd++){
+   for (int fd = FDBASE; fd < FDLIMIT; fd++){
       if (parent->fd_table[fd]){
          current->fd_table[fd] = file_duplicate(parent->fd_table[fd]);
       }else{
@@ -201,23 +208,16 @@ __do_fork (void *aux) {
 
    if_.R.rax = 0;
    process_init();
-   memcpy (&current->tf, &if_, sizeof (struct intr_frame));
-
 
    /* Finally, switch to the newly created process. */
    if (succ){
-      ASSERT(!list_empty(&dup_sema->waiters));
       sema_up(dup_sema);
-      free(parent_if);
-      free(aux);
       do_iret(&if_);
-      
    }
 error:
-   ASSERT(!list_empty(&dup_sema->waiters));
    sema_up(dup_sema);
-   free(parent_if);
-   free(aux);
+   current->my_exit_code = -1;
+   parent->abc = true;
    thread_exit();
 }
 
@@ -239,9 +239,11 @@ process_exec (void *f_name) {
    /* We first kill the current context */
    process_cleanup();
 
+   lock_acquire(&filesys_lock);
    /* And then load the binary */
    success = load (file_name, &_if);
    /* If load failed, quit. */
+   lock_release(&filesys_lock);
    palloc_free_page (file_name);
    if (!success)
       return -1;
@@ -290,6 +292,7 @@ process_wait (tid_t child_tid) {
             result = c_info->c_exit_code;
             list_remove(child_elem);
             free(c_info);
+            c_info == NULL;
             return result;
          }
          child_elem = list_next(child_elem);
@@ -306,13 +309,39 @@ process_exit (void) {
       file_close(curr->my_file);
       curr->my_file = NULL;
    }
-   // curr->my_parent->my_child = NULL;
-   // curr->my_parent->child_exit_code = curr->my_exit_code;
+
+   struct file **fd_table = curr->fd_table;
+   lock_acquire(&filesys_lock);
+   for (int i = FDBASE; i < FDLIMIT; i++)
+   {
+      if (fd_table[i]){
+         file_close(fd_table[i]);
+         fd_table[i] = NULL;
+      }
+   }
+   lock_release(&filesys_lock);
+
+   enum intr_level old_level;
+   old_level = intr_disable();
+
    if (curr->my_info){
       curr->my_info->c_exit_code = curr->my_exit_code;
       curr->my_info->finished = true;
       sema_up(&curr->my_info->c_sema);
    }
+   
+   struct list_elem *list_elem = list_begin(&curr->child_list);
+   while (list_elem != list_end(&curr->child_list)){
+      struct child_info * c_info = list_entry(list_elem, struct child_info, c_elem);
+      
+      list_elem = list_next(list_elem);
+      if (c_info){
+         free(c_info);
+         c_info = NULL;
+      }
+   }
+
+   intr_set_level (old_level);
 
    /* TODO: Your code goes here.
     * TODO: Implement process termination message (see
@@ -365,54 +394,54 @@ process_activate (struct thread *next) {
  * from the ELF specification, [ELF1], more-or-less verbatim.  */
 
 // /* ELF types.  See [ELF1] 1-2. */
-// #define EI_NIDENT 16
+#define EI_NIDENT 16
 
-// #define PT_NULL    0            /* Ignore. */
-// #define PT_LOAD    1            /* Loadable segment. */
-// #define PT_DYNAMIC 2            /* Dynamic linking info. */
-// #define PT_INTERP  3            /* Name of dynamic loader. */
-// #define PT_NOTE    4            /* Auxiliary info. */
-// #define PT_SHLIB   5            /* Reserved. */
-// #define PT_PHDR    6            /* Program header table. */
-// #define PT_STACK   0x6474e551   /* Stack segment. */
+#define PT_NULL    0            /* Ignore. */
+#define PT_LOAD    1            /* Loadable segment. */
+#define PT_DYNAMIC 2            /* Dynamic linking info. */
+#define PT_INTERP  3            /* Name of dynamic loader. */
+#define PT_NOTE    4            /* Auxiliary info. */
+#define PT_SHLIB   5            /* Reserved. */
+#define PT_PHDR    6            /* Program header table. */
+#define PT_STACK   0x6474e551   /* Stack segment. */
 
-// #define PF_X 1          /* Executable. */
-// #define PF_W 2          /* Writable. */
-// #define PF_R 4          /* Readable. */
+#define PF_X 1          /* Executable. */
+#define PF_W 2          /* Writable. */
+#define PF_R 4          /* Readable. */
 
 /* Executable header.  See [ELF1] 1-4 to 1-8.
  * This appears at the very beginning of an ELF binary. */
-// struct ELF64_hdr {
-//    unsigned char e_ident[EI_NIDENT];
-//    uint16_t e_type;
-//    uint16_t e_machine;
-//    uint32_t e_version;
-//    uint64_t e_entry;
-//    uint64_t e_phoff;
-//    uint64_t e_shoff;
-//    uint32_t e_flags;
-//    uint16_t e_ehsize;
-//    uint16_t e_phentsize;
-//    uint16_t e_phnum;
-//    uint16_t e_shentsize;
-//    uint16_t e_shnum;
-//    uint16_t e_shstrndx;
-// };
+struct ELF64_hdr {
+   unsigned char e_ident[EI_NIDENT];
+   uint16_t e_type;
+   uint16_t e_machine;
+   uint32_t e_version;
+   uint64_t e_entry;
+   uint64_t e_phoff;
+   uint64_t e_shoff;
+   uint32_t e_flags;
+   uint16_t e_ehsize;
+   uint16_t e_phentsize;
+   uint16_t e_phnum;
+   uint16_t e_shentsize;
+   uint16_t e_shnum;
+   uint16_t e_shstrndx;
+};
 
-// struct ELF64_PHDR {
-//    uint32_t p_type;
-//    uint32_t p_flags;
-//    uint64_t p_offset;
-//    uint64_t p_vaddr;
-//    uint64_t p_paddr;
-//    uint64_t p_filesz;
-//    uint64_t p_memsz;
-//    uint64_t p_align;
-// };
+struct ELF64_PHDR {
+   uint32_t p_type;
+   uint32_t p_flags;
+   uint64_t p_offset;
+   uint64_t p_vaddr;
+   uint64_t p_paddr;
+   uint64_t p_filesz;
+   uint64_t p_memsz;
+   uint64_t p_align;
+};
 
-// /* Abbreviations */
-// #define ELF ELF64_hdr
-// #define Phdr ELF64_PHDR
+/* Abbreviations */
+#define ELF ELF64_hdr
+#define Phdr ELF64_PHDR
 
 static bool setup_stack (struct intr_frame *if_);
 static bool validate_segment (const struct Phdr *, struct file *);
@@ -441,7 +470,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
    // Tokenize & put them to argv
    char *token, *save_ptr;
-   char *argv[64];
+   char *argv[40];
    int argc = 0;
    if (strchr(file_name, ' '))
    {
@@ -538,7 +567,7 @@ load (const char *file_name, struct intr_frame *if_) {
 
    /* PROJECT 2: ARGUMENT PASSING */
    size_t sum = 0;
-   char *argv_address[64];
+   char *argv_address[40];
 
    // step 3-1. Break the command into words
    for(int i = argc-1; i >= 0; i--) {
@@ -578,6 +607,7 @@ done:
    if (file){
       if (thread_current()->my_file){
          file_close(thread_current()->my_file);
+         thread_current()->my_file = NULL;
       }
       thread_current()->my_file = file;
       file_deny_write(thread_current()->my_file);
