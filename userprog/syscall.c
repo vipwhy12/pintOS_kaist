@@ -15,15 +15,12 @@
 #include "kernel/stdio.h"
 #include "filesys/file.h"
 #include "user/syscall.h"
-//#include "userprog/process.h"
+#include "userprog/process.h"
 
 void syscall_entry (void);
 void syscall_handler (struct intr_frame *);
 
-// struct lock {
-// 	struct thread *holder;
-// 	struct semaphore semaphore;
-// };
+
 
 /* System call.
  *
@@ -74,6 +71,7 @@ add_file_to_fd_table(struct file *file){
 	if(fd >= MAX_FD_NUM){
 		return -1;
 	}
+
 	curr->fd_table[fd] = file;
 	return fd;
 }
@@ -88,17 +86,6 @@ file *fd_to_struct_filep(int fd){
 	return curr->fd_table[fd];
 }
 
-
-void check_address(void *addr){
-	struct thread *curr = thread_current();
-	/* 유저 메모리 주소에 있는지, 물리 메모리에 맵핑이 된 주소인지 확인 */
-	if(!(addr && is_user_vaddr(addr) && pml4_get_page(curr->pml4, addr)))
-			exit_handler(-1);
-}
-
-
-/* SYSTEMCALL FUCNTION */
-
 void
 exit_handler(int status){
 	struct thread *t = thread_current();
@@ -106,6 +93,20 @@ exit_handler(int status){
 	printf("%s: exit(%d)\n", t->name, status); 
 	thread_exit();
 }
+
+
+void check_address(void *addr){
+	struct thread *cur = thread_current();
+ 	/* 유저 메모리 주소에 있는지, 물리 메모리에 맵핑이 된 주소인지 확인 */
+	if (!(is_user_vaddr(addr)) || pml4_get_page(cur -> pml4, addr) == NULL || addr == NULL){
+		exit_handler(-1);
+	}
+}
+
+
+/* SYSTEMCALL FUCNTION */
+
+
 
 void 
 halt_handler (){
@@ -125,23 +126,30 @@ bool create_handler(const char * file, unsigned initial_size){
 int
 open_handler(const char *file){
 	check_address(file);
-	//lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	struct file *open_file = filesys_open(file);
-	int fd = add_file_to_fd_table(open_file);
+	lock_release(&filesys_lock);
 
-	if(strcmp(thread_current()->name, file) == 0){
-		file_deny_write(open_file);
-	}
-	
-	//lock_release(&filesys_lock);
-	
 	if(open_file == NULL){
 		return -1;
 	}
 
-	if(fd == -1){
+	int fd = add_file_to_fd_table(open_file);
+
+	/* 내가 이미 열었는데 들어갈 자리가 없어요! */
+	if(fd == -1 ){
+		lock_acquire(&filesys_lock);
 		file_close(open_file);
-	}
+		lock_release(&filesys_lock);
+		//return -1;
+	} 
+
+	// if(strcmp(thread_current()->name, file) == 0){
+	// 	lock_acquire(&filesys_lock);
+	// 	file_deny_write(open_file);
+	// 	lock_release(&filesys_lock);
+	// }
+	
 	return fd;
 }
 
@@ -158,9 +166,9 @@ void get_argument(void *rsp, int **arg, int count){
 
 bool remove_handler(const char *file){
 	check_address(file);
-	//lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	bool remove_result = filesys_remove(file);
-	//lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return remove_result;
 }
 
@@ -170,16 +178,15 @@ int filesize_handler(int fd){
 	if(file_object == NULL){
 		return -1;
 	}
-	//lock_acquire(&filesys_lock);
+	lock_acquire(&filesys_lock);
 	off_t write_byte = file_length(file_object);
-	//lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	return write_byte;
 }
 
 int
 read_handler(int fd, void *buffer, unsigned size){
 	check_address(buffer);
-	// check_address(buffer + size -1);
 
 	int read_count;
 	struct file *fileobj = fd_to_struct_filep(fd);
@@ -191,6 +198,7 @@ read_handler(int fd, void *buffer, unsigned size){
 	if (fd == STDOUT_FILENO){
 		return -1;
 	}
+
 	lock_acquire(&filesys_lock);
 	read_count = file_read(fileobj, buffer, size);
 	lock_release(&filesys_lock);
@@ -206,16 +214,19 @@ write_handler(int fd, const void *buffer, unsigned size){
 	if(fd == STDIN_FILENO){
 		return 0;
 	} else if (fd == STDOUT_FILENO){
+
 		putbuf(buffer, size);
 		return size;
+
 	}else {
 		struct file *write_file = fd_to_struct_filep(fd);
 		if(write_file == NULL){
 			return 0;
 		}
-		//lock_acquire(&filesys_lock);
+
+		lock_acquire(&filesys_lock);
 		off_t write_byte = file_write(write_file, buffer, size);
-		//lock_release(&filesys_lock);
+		lock_release(&filesys_lock);
 		return write_byte;
 	}
 
@@ -242,12 +253,14 @@ tell_handler(int fd){
 
 void close_handler(int fd){
 	struct file *close_file = fd_to_struct_filep(fd);
+
 	if(close_file == NULL){
 		return;
 	}
-	//lock_acquire(&filesys_lock);
+
+	lock_acquire(&filesys_lock);
 	file_close(close_file);
-	//lock_release(&filesys_lock);
+	lock_release(&filesys_lock);
 	remove_file_from_fd_table(fd);
 }
 
@@ -265,23 +278,38 @@ fork_handler(const char * thread, struct intr_frame *f){
 
 int 
 exec_handler(char *file){
+
+	struct thread *curr = thread_current();
+	// if (!(file
+	// 		&& is_user_vaddr(file)
+	// 	  	&& pml4_get_page(curr->pml4, file)))
+	// {
+	// 	curr->exit_status = -1;
+	// 	thread_exit();
+	// }
+
 	check_address(file);
+	//int file_size = strlen(file) + 1;
 
-	int file_size = strlen(file)+1;
-	char *fn_copy = palloc_get_page(PAL_ZERO); // 파일 네임 카피
-
-	if (fn_copy == NULL) {
-		return -1;
+	/* 파일 이름을 복사합니다! */
+	char *file_name_copy = palloc_get_page(0); 
+	strlcpy (file_name_copy, file, PGSIZE);
+	check_address(file_name_copy);
+	printf("+++보내주기전+++========\n");
+	if (file_name_copy == NULL) {
+		curr->exit_status = -1;
+		thread_exit();
 	}
-	strlcpy (fn_copy, file, file_size);
 
-	if (process_exec (fn_copy) == -1){
-		return -1;
-	}
-	
-	NOT_REACHED();
-	return 0;
+	printf("+++보내주기전+++========\n");
+	//printf("+++보내주기전+%s++========\n", file);
+	// if (process_exec(file_name_copy) == -1){
+	// 	curr->exit_status = -1;
+	// 	thread_exit();
 
+	// }
+	// return -1;
+	return process_exec(file_name_copy);
 }
 
 
@@ -321,7 +349,7 @@ syscall_handler (struct intr_frame *f) {
 
 		//프로세스 생성
 		case SYS_EXEC :
-			f->R.rax = exec_handler(f->R.rdi);
+			exec_handler(f->R.rdi);
 			break;
 
 		case SYS_WAIT :

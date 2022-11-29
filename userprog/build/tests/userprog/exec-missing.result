@@ -1,20 +1,19 @@
 FAIL
-Kernel panic in run: PANIC at ../../threads/thread.c:292 in thread_current(): assertion `is_thread (t)' failed.
-Call stack: 0x8004217faf 0x80042070ff 0x800420a85c 0x800420a76f 0x800420b6e8 0x800420b7b0 0x800420bd56 0x800421fcd3 0x800421f2a2 0x800421f372 0x800421dce8 0x800421bede 0x800421bb4b 0x800421d5cd 0x800421d6c7 0x800421cdf5
-Translation of call stack:
-0x0000008004217faf: debug_panic (lib/kernel/debug.c:32)
-0x00000080042070ff: thread_current (threads/thread.c:293)
-0x000000800420a85c: lock_held_by_current_thread (threads/synch.c:251)
-0x000000800420a76f: lock_release (threads/synch.c:236)
-0x000000800420b6e8: palloc_get_multiple (threads/palloc.c:271 (discriminator 4))
-0x000000800420b7b0: palloc_get_page (threads/palloc.c:297)
-0x000000800420bd56: malloc (threads/malloc.c:122)
-0x000000800421fcd3: inode_read_at (filesys/inode.c:210)
-0x000000800421f2a2: lookup (filesys/directory.c:88 (discriminator 1))
-0x000000800421f372: dir_lookup (filesys/directory.c:112)
-0x000000800421dce8: filesys_open (filesys/filesys.c:92)
-0x000000800421bede: load (userprog/process.c:478)
-0x000000800421bb4b: process_exec (userprog/process.c:256)
-0x000000800421d5cd: exec_handler (userprog/syscall.c:278)
-0x000000800421d6c7: syscall_handler (userprog/syscall.c:324)
-0x000000800421cdf5: no_sti (userprog/syscall-entry.o:?)
+Test output failed to match any acceptable form.
+
+Acceptable output:
+  (exec-missing) begin
+  load: no-such-file: open failed
+  exec-missing: exit(-1)
+Differences in `diff -u' format:
+  (exec-missing) begin
+- load: no-such-file: open failed
+  exec-missing: exit(-1)
+Acceptable output:
+  (exec-missing) begin
+  (exec-missing) exec("no-such-file"): -1
+  exec-missing: exit(-1)
+Differences in `diff -u' format:
+  (exec-missing) begin
+- (exec-missing) exec("no-such-file"): -1
+  exec-missing: exit(-1)

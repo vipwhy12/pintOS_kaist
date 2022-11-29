@@ -112,6 +112,9 @@ struct thread {
 	struct file ** fd_table;
 	int fd_idx;
 
+	struct file * my_file;
+	
+
 	struct semaphore fork_sema;
 	struct semaphore wait_sema;
 	struct semaphore free_sema;

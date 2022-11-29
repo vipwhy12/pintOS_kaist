@@ -12,4 +12,4 @@ userprog/syscall.o: ../../userprog/syscall.c \
  ../../include/threads/init.h ../../include/threads/palloc.h \
  ../../include/filesys/filesys.h ../../include/filesys/off_t.h \
  ../../include/lib/kernel/stdio.h ../../include/filesys/file.h \
- ../../include/lib/user/syscall.h
+ ../../include/lib/user/syscall.h ../../include/userprog/process.h

@@ -18,6 +18,7 @@
 #include "threads/mmu.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "userprog/syscall.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
@@ -81,13 +82,14 @@ initd (void *f_name) {
 struct 
 thread *get_child(int pid){
 	struct thread *curr = thread_current();
-	struct list *child_list = &curr->child_list;
-	for(struct list_elem *e = list_begin(child_list); e != list_end(child_list); e = list_next(e)){
-		//printf("여기야 내가 안죽는거야 ^^");
+	// struct list *child_list = &curr->child_list;
+	struct list_elem *e = list_begin(&curr->child_list);
+	while (e != list_end(&curr->child_list)){
 		struct thread *t = list_entry(e, struct thread, child_list_elem);
 		if(t->tid == pid){		
 			return t;
 		}
+		e = list_next(e);
 	}
 	return NULL;
 }
@@ -249,19 +251,20 @@ process_exec (void *f_name) {
 
 	/* We first kill the current context */
 	process_cleanup ();
-
-	
+	lock_acquire(&filesys_lock);
 
 	/* And then load the binary */
 	success = load (file_name, &_if);
-	if (!success)
-		return -1;
+
+	lock_release(&filesys_lock);
 
 	/* If load failed, quit. */
 	palloc_free_page (file_name);
 
+	if (!success){
+		return -1;
+	}
 
-	// hex_dump(_if.rsp, _if.rsp, USER_STACK - _if.rsp, true);
 	/* Start switched process. */
 	do_iret (&_if);
 	NOT_REACHED ();
@@ -278,32 +281,41 @@ process_exec (void *f_name) {
  * This function will be implemented in problem 2-2.  For now, it
  * does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) {
+process_wait (tid_t child_tid) {
 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
 	 * XXX:       to add infinite loop here before
 	 * XXX:       implementing the process_wait. */
 		/* XXX: 힌트) pintos exit if process_wait(initd), process_wait를 구현하기 전에 여기에 
 	무한 루프를 추가하는 것이 좋습니다. */
+	enum intr_level old_level;
+	old_level = intr_disable ();
 	struct thread *child = get_child(child_tid);	//넘어온 tid 값과 같은 자식 리스트의 스레드를 가져온다.
+	intr_set_level(old_level);	
 
 	if (child == NULL){							//없다면 리턴 -1
 		return -1;
 	}
+
 	if (child->is_waited){						//아직 기다리라고 한 자식이면 리턴 -1
 		return -1;
 	}
 	else {										//자식이 있고 기다리라고 했던 적이 없다면 
 		child -> is_waited = true;				//자식을 기다리라고 한다. 
 	}	
+
 	sema_down(&child -> wait_sema);				//자식이 wait 상태인동안 인터럽트 활성화
 	int exit_status = child -> exit_status;
 	list_remove(&child->child_list_elem);		//자식 제거
 	sema_up(&child -> free_sema);				//free할 수 있도록 인터럽트 해제
+
+
 	// printf("wait쪽 pid %d\n",child->tid);
 	// while (1){}
 	// thread_set_priority(thread_get_priority()-1);
 
 	// struct thread *child = get_child(child_tid);
+	// 5
+	// 6
 	return exit_status;			// 종료 상태를 리턴
 }
 
@@ -445,210 +457,382 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
 */ 
 static bool
 load (const char *file_name, struct intr_frame *if_) {
-	struct thread *t = thread_current ();
-	struct ELF ehdr;
-	struct file *file = NULL;
-	off_t file_ofs;
-	bool success = false;
-	int i;
-
-	/* Allocate and activate page directory. */
-	/* 페이지 디렉토리 생성 */
-	t->pml4 = pml4_create ();
-	if (t->pml4 == NULL)
-		goto done;
-
-	/* 페이지 테이블 활성화 */
-	process_activate (thread_current ());
-
-	// 문자열 파싱해서 넘겨주기
-	char *token, *save_ptr;
-	char *argv[128];
-	int argc = 0;
-	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
-		// token + '\0';
-		argv[argc] = token;
-		//printf ("token은 : '%s' #### argv[%d]는 %s\n", token, argc, argv[argc]);
-		argc++;
-	}
-
-	file_name = argv[0];
-
-	/* Open executable file. */
-	file = filesys_open (file_name);
-	if (file == NULL) {
-		printf ("load: %s: open failed\n", file_name);
-		goto done;
-	}
-
-	/* Read and verify executable header. */
-	/* ELF파일의 헤더 정보를 읽어와 저장 */
-	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
-			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
-			|| ehdr.e_type != 2
-			|| ehdr.e_machine != 0x3E // amd64
-			|| ehdr.e_version != 1
-			|| ehdr.e_phentsize != sizeof (struct Phdr)
-			|| ehdr.e_phnum > 1024) {
-		printf ("load: %s: error loading executable\n", file_name);
-		goto done;
-	}
-
-	/* Read program headers. */
-	file_ofs = ehdr.e_phoff;
-	for (i = 0; i < ehdr.e_phnum; i++) {
-		struct Phdr phdr;
-
-		if (file_ofs < 0 || file_ofs > file_length (file))
-			goto done;
-		file_seek (file, file_ofs);
-
-		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
-			goto done;
-		file_ofs += sizeof phdr;
-		switch (phdr.p_type) {
-			case PT_NULL:
-			case PT_NOTE:
-			case PT_PHDR:
-			case PT_STACK:
-			default:
-				/* Ignore this segment. */
-				break;
-			case PT_DYNAMIC:
-			case PT_INTERP:
-			case PT_SHLIB:
-				goto done;
-			case PT_LOAD:
-				if (validate_segment (&phdr, file)) {
-					bool writable = (phdr.p_flags & PF_W) != 0;
-					uint64_t file_page = phdr.p_offset & ~PGMASK;
-					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
-					uint64_t page_offset = phdr.p_vaddr & PGMASK;
-					uint32_t read_bytes, zero_bytes;
-					if (phdr.p_filesz > 0) {
-						/* Normal segment.
-						 * Read initial part from disk and zero the rest. */
-						read_bytes = page_offset + phdr.p_filesz;
-						zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
-								- read_bytes);
-					} else {
-						/* Entirely zero.
-						 * Don't read anything from disk. */
-						read_bytes = 0;
-						zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
-					}
-					if (!load_segment (file, file_page, (void *) mem_page,
-								read_bytes, zero_bytes, writable))
-						goto done;
-				}
-				else
-					goto done;
-				break;
-		}
-	}
-
-	/* Set up stack. */
-	if (!setup_stack (if_))
-		goto done;
-
-	/* Start address. */
-	if_->rip = ehdr.e_entry;
-
-	/* TODO: Your code goes here.
-	 * TODO: Implement argument passing (see project2/argument_passing.html). */
-
-	/* PROJECT 2: ARGUMENT PASSING */
-  // size_t sum = 0;
-	// char *argv_address[64];
-
-	// // 1. token으로 잘라서 넣기
-  //   for(int i = argc-1; i >= 0; i--) {
-  //       size_t len = strlen(argv[i]) + 1;   // '\0' 포함
-  //       sum += len;
-  //       argv_address[i] = (if_->rsp - sum);
-  //       memcpy((if_->rsp - sum), argv[i], len);
-  //   }
-
-	// // 2. word-align
-	// while((if_->rsp - sum) % 8 != 0){
-	// 	sum++;
-	// 	*(uint8_t *) (if_->rsp - sum) = 0;
-	// }
-
-	// // 3. token 주소를 data로 넣기
-	// sum += 8;
-	// memset(if_->rsp - sum, 0, sizeof(char **));
-
-	// for (int i = argc-1; i >=0 ; i--){
-	// 	sum += 8;
-	// 	memcpy(if_->rsp - sum, &argv_address[i], sizeof(char **));
-	// }
-
-	// // // 4. Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
-	// if_->rsp -= sum;	// stack pointer 옮겨줘
-	// if_->R.rdi = argc;
-	// if_->R.rsi = if_->rsp;
-
-	// // // // 5. fake address
-	// memset(if_->rsp - 8, 0, sizeof(void *));
-//1. 첫 주소 부터 글자의 길이(끝에 \0포함) 만큼 넣어준다
-	//	글자 길이 만큼 저장 위치가 감소 해야 한다. (거꾸로)
-	//	argv[0]까지 = RDI: 4
-	uintptr_t start_p = (if_ -> rsp);	//초기 시작 포인터 저장
-	uintptr_t curr = 0;	//계속 갱신 되는 임시 포인터 
-	char *address[64];	//argv의 주소값을 저장할 배열
-
-	/*argc 자른 마디의 개수만큼 for문 돌린다.*/
-	for (int i = argc - 1; i != -1; i--)
-	{
-		size_t argv_size = (strlen(argv[i]) + 1);	//memcpy를 위한 사이즈(뒤에 '/0'을 하나씩 넣기위한 +1)
-		curr += argv_size;	//임시 포인터 갱신
-		address[i] = (start_p - curr);	//나중에 주소를 저장해야 하기에 지금 주소를 저장해둠
-		
-		memcpy ((start_p-curr), argv[i], argv_size);	//argv[i]의 데이터를 start 포인터에 저장 
-	}
-
-	//2. 마지막에 word-align = 0 으로 채운다 (8의 배수로 체운다)
-	size_t word_align_size = (start_p-curr) % 8;	//8의 배수로 채워야 하므로 나머지 만큼만 공백으로 채움
-	curr += word_align_size;
-	memset(start_p - curr, '\0', word_align_size);
-
-	//3. argv 배열의 마지막은 0으로 채운다. 
-	curr += 8;
-	memset(start_p - curr, 0, 8);
-
-	//3-1. argv의 주소값을 뒤에서부터 하나씩 넣는다
-	//	주소는 8바이트씩 넣는다. 
-	for (int j = argc-1; j != -1; j--)
-	{
-		size_t argv_size = 8;
-		curr += argv_size;
-		
-		memcpy ((start_p-curr), &address[j], argv_size);
-	}
-
-	//4. 마지막에 Return address 를 0으로 넣는다. 
-	curr += 8;
-	memset(start_p-curr, 0, 8);
-
-	//5. 저장했던 임시 포인터를 실제 rsp에 적용하고 나머지 포인터들도 세팅 한다. 
-	if_->rsp -= curr;
-	if_->R.rdi = argc;
-	if_->R.rsi = (if_->rsp)+8;
-
-
-
-	// 확인
-    //hex_dump(if_->rsp - 8, if_->rsp - 8, USER_STACK - if_->rsp + 8, true);
+   struct thread *t = thread_current();
+   struct ELF ehdr;
+   struct file *file = NULL;
+   off_t file_ofs;
+   bool success = false;
+   int i;
 	
+   /* Allocate and activate page directory. */
+   t->pml4 = pml4_create ();
+   if (t->pml4 == NULL)
+      goto done;
+   process_activate (thread_current ());
 
-	success = true;
+   // Tokenize & put them to argv
+   char *token, *save_ptr;
+   char *argv[40];
+   int argc = 0;
+	
+	// printf("==진짜 잘해라.ㄴ 파싱전==%s=====\n", file_name);
+   if (strchr(file_name, ' '))
+   {
+      for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
+         argv[argc] = token;
+         argc++;
+      }
+   }
+   else
+   {
+      argv[argc] = file_name;
+      argc++;
+   }	
+	//  printf("=======강인이 :=%s=====\n", file_name);
+
+   file = filesys_open(file_name);
+
+	// printf("=======규성이 :=%p=====\n", file);
+
+   if (file == NULL) {
+			// printf("여기못들어오면 집에 들어올 생각도하지마!!!\n");
+      printf ("load: %s: open failed\n", file_name);
+      goto done;
+   }
+   
+   /* Read and verify executable header. */
+   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
+         || memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
+         || ehdr.e_type != 2
+         || ehdr.e_machine != 0x3E // amd64
+         || ehdr.e_version != 1
+         || ehdr.e_phentsize != sizeof (struct Phdr)
+         || ehdr.e_phnum > 1024) {
+      printf ("load: %s: error loading executable\n", file_name);
+      goto done;
+   }
+
+   /* Read program headers. */
+   file_ofs = ehdr.e_phoff;
+   for (i = 0; i < ehdr.e_phnum; i++) {
+      struct Phdr phdr;
+
+      if (file_ofs < 0 || file_ofs > file_length (file))
+         goto done;
+      file_seek (file, file_ofs);
+
+      if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+         goto done;
+      file_ofs += sizeof phdr;
+      switch (phdr.p_type) {
+         case PT_NULL:
+         case PT_NOTE:
+         case PT_PHDR:
+         case PT_STACK:
+         default:
+            /* Ignore this segment. */
+            break;
+         case PT_DYNAMIC:
+         case PT_INTERP:
+         case PT_SHLIB:
+            goto done;
+         case PT_LOAD:
+            if (validate_segment (&phdr, file)) {
+               bool writable = (phdr.p_flags && PF_W) != 0;
+               uint64_t file_page = phdr.p_offset & ~PGMASK;
+               uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
+               uint64_t page_offset = phdr.p_vaddr & PGMASK;
+               uint32_t read_bytes, zero_bytes;
+               if (phdr.p_filesz > 0) {
+                  /* Normal segment.
+                   * Read initial part from disk and zero the rest. */
+                  read_bytes = page_offset + phdr.p_filesz;
+                  zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
+                        - read_bytes);
+               } else {
+                  /* Entirely zero.
+                   * Don't read anything from disk. */
+                  read_bytes = 0;
+                  zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
+               }
+               if (!load_segment (file, file_page, (void *) mem_page,
+                        read_bytes, zero_bytes, writable))
+                  goto done;
+            }
+            else
+               goto done;
+            break;
+      }
+   }
+
+   /* Set up stack. */
+   if (!setup_stack (if_))
+      goto done;
+
+   /* Start address. */
+   if_->rip = ehdr.e_entry;
+
+   /* TODO: Your code goes here.
+    * TODO: Implement argument passing (see project2/argument_passing.html). */
+
+   /* PROJECT 2: ARGUMENT PASSING */
+   size_t sum = 0;
+   char *argv_address[40];
+
+   // step 3-1. Break the command into words
+   for(int i = argc-1; i >= 0; i--) {
+      size_t len = strlen(argv[i]) + 1;   // '\0' 포함
+      sum += len;
+      argv_address[i] = (if_->rsp - sum);
+      memcpy((if_->rsp - sum), argv[i], len);
+    }
+
+   // step 3-2. Word-Align
+   while((if_->rsp - sum) % 8 != 0){
+      sum++;
+      *(uint8_t *) (if_->rsp - sum) = 0;
+   }
+
+   // step 2. Push the address of each string plus a null pointer sentinel
+   for (int i = argc; i >=0 ; i--){
+      sum += 8;
+      if (i == argc)
+         memset(if_->rsp - sum, 0, sizeof(char **));
+      else
+         memcpy(if_->rsp - sum, &argv_address[i], sizeof(char **));
+   }
+
+   // step 1-1. Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
+   if_->rsp -= sum;  
+   if_->R.rdi = argc;
+   if_->R.rsi = if_->rsp;
+
+   // step 1-2. Push a fake "return address"
+   memset(if_->rsp - 8, 0, sizeof(void *));
+
+   success = true;
 
 done:
-	/* We arrive here whether the load is successful or not. */
-	file_close (file);
-	return success;
+   /* We arrive here whether the load is successful or not. */
+  //  if (file){
+  //     if (thread_current()->my_file){
+  //        file_close(thread_current()->my_file);
+  //        thread_current()->my_file = NULL;
+  //     }
+  //     thread_current()->my_file = file;
+  //     file_deny_write(thread_current()->my_file);
+  //  }
+	file_close(file);
+   return success;
 }
+
+// static bool
+// load (const char *file_name, struct intr_frame *if_) {
+// 	struct thread *t = thread_current ();
+// 	struct ELF ehdr;
+// 	struct file *file = NULL;
+// 	off_t file_ofs;
+// 	bool success = false;
+// 	int i;
+
+// 	/* Allocate and activate page directory. */
+// 	/* 페이지 디렉토리 생성 */
+// 	t->pml4 = pml4_create ();
+// 	if (t->pml4 == NULL)
+// 		goto done;
+
+// 	/* 페이지 테이블 활성화 */
+// 	process_activate (thread_current ());
+
+// 	// 문자열 파싱해서 넘겨주기
+// 	char *token, *save_ptr;
+// 	char *argv[128];
+// 	int argc = 0;
+// 	for (token = strtok_r (file_name, " ", &save_ptr); token != NULL;  token = strtok_r (NULL, " ", &save_ptr)){
+// 		// token + '\0';
+// 		argv[argc] = token;
+// 		//printf ("token은 : '%s' #### argv[%d]는 %s\n", token, argc, argv[argc]);
+// 		argc++;
+// 	}
+
+// 	file_name = argv[0];
+
+// 	/* Open executable file. */
+// 	file = filesys_open (file_name);
+// 	if (file == NULL) {
+// 		printf ("load: %s: open failed\n", file_name);
+// 		goto done;
+// 	}
+
+// 	/* Read and verify executable header. */
+// 	/* ELF파일의 헤더 정보를 읽어와 저장 */
+// 	if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
+// 			|| memcmp (ehdr.e_ident, "\177ELF\2\1\1", 7)
+// 			|| ehdr.e_type != 2
+// 			|| ehdr.e_machine != 0x3E // amd64
+// 			|| ehdr.e_version != 1
+// 			|| ehdr.e_phentsize != sizeof (struct Phdr)
+// 			|| ehdr.e_phnum > 1024) {
+// 		printf ("load: %s: error loading executable\n", file_name);
+// 		goto done;
+// 	}
+
+// 	/* Read program headers. */
+// 	file_ofs = ehdr.e_phoff;
+// 	for (i = 0; i < ehdr.e_phnum; i++) {
+// 		struct Phdr phdr;
+
+// 		if (file_ofs < 0 || file_ofs > file_length (file))
+// 			goto done;
+// 		file_seek (file, file_ofs);
+
+// 		if (file_read (file, &phdr, sizeof phdr) != sizeof phdr)
+// 			goto done;
+// 		file_ofs += sizeof phdr;
+// 		switch (phdr.p_type) {
+// 			case PT_NULL:
+// 			case PT_NOTE:
+// 			case PT_PHDR:
+// 			case PT_STACK:
+// 			default:
+// 				/* Ignore this segment. */
+// 				break;
+// 			case PT_DYNAMIC:
+// 			case PT_INTERP:
+// 			case PT_SHLIB:
+// 				goto done;
+// 			case PT_LOAD:
+// 				if (validate_segment (&phdr, file)) {
+// 					bool writable = (phdr.p_flags & PF_W) != 0;
+// 					uint64_t file_page = phdr.p_offset & ~PGMASK;
+// 					uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
+// 					uint64_t page_offset = phdr.p_vaddr & PGMASK;
+// 					uint32_t read_bytes, zero_bytes;
+// 					if (phdr.p_filesz > 0) {
+// 						/* Normal segment.
+// 						 * Read initial part from disk and zero the rest. */
+// 						read_bytes = page_offset + phdr.p_filesz;
+// 						zero_bytes = (ROUND_UP (page_offset + phdr.p_memsz, PGSIZE)
+// 								- read_bytes);
+// 					} else {
+// 						/* Entirely zero.
+// 						 * Don't read anything from disk. */
+// 						read_bytes = 0;
+// 						zero_bytes = ROUND_UP (page_offset + phdr.p_memsz, PGSIZE);
+// 					}
+// 					if (!load_segment (file, file_page, (void *) mem_page,
+// 								read_bytes, zero_bytes, writable))
+// 						goto done;
+// 				}
+// 				else
+// 					goto done;
+// 				break;
+// 		}
+// 	}
+
+// 	/* Set up stack. */
+// 	if (!setup_stack (if_))
+// 		goto done;
+
+// 	/* Start address. */
+// 	if_->rip = ehdr.e_entry;
+
+// 	/* TODO: Your code goes here.
+// 	 * TODO: Implement argument passing (see project2/argument_passing.html). */
+
+// 	/* PROJECT 2: ARGUMENT PASSING */
+//   // size_t sum = 0;
+// 	// char *argv_address[64];
+
+// 	// // 1. token으로 잘라서 넣기
+//   //   for(int i = argc-1; i >= 0; i--) {
+//   //       size_t len = strlen(argv[i]) + 1;   // '\0' 포함
+//   //       sum += len;
+//   //       argv_address[i] = (if_->rsp - sum);
+//   //       memcpy((if_->rsp - sum), argv[i], len);
+//   //   }
+
+// 	// // 2. word-align
+// 	// while((if_->rsp - sum) % 8 != 0){
+// 	// 	sum++;
+// 	// 	*(uint8_t *) (if_->rsp - sum) = 0;
+// 	// }
+
+// 	// // 3. token 주소를 data로 넣기
+// 	// sum += 8;
+// 	// memset(if_->rsp - sum, 0, sizeof(char **));
+
+// 	// for (int i = argc-1; i >=0 ; i--){
+// 	// 	sum += 8;
+// 	// 	memcpy(if_->rsp - sum, &argv_address[i], sizeof(char **));
+// 	// }
+
+// 	// // // 4. Point %rsi to argv (the address of argv[0]) and set %rdi to argc.
+// 	// if_->rsp -= sum;	// stack pointer 옮겨줘
+// 	// if_->R.rdi = argc;
+// 	// if_->R.rsi = if_->rsp;
+
+// 	// // // // 5. fake address
+// 	// memset(if_->rsp - 8, 0, sizeof(void *));
+// //1. 첫 주소 부터 글자의 길이(끝에 \0포함) 만큼 넣어준다
+// 	//	글자 길이 만큼 저장 위치가 감소 해야 한다. (거꾸로)
+// 	//	argv[0]까지 = RDI: 4
+// 	uintptr_t start_p = (if_ -> rsp);	//초기 시작 포인터 저장
+// 	uintptr_t curr = 0;	//계속 갱신 되는 임시 포인터 
+// 	char *address[64];	//argv의 주소값을 저장할 배열
+
+// 	/*argc 자른 마디의 개수만큼 for문 돌린다.*/
+// 	for (int i = argc - 1; i != -1; i--)
+// 	{
+// 		size_t argv_size = (strlen(argv[i]) + 1);	//memcpy를 위한 사이즈(뒤에 '/0'을 하나씩 넣기위한 +1)
+// 		curr += argv_size;	//임시 포인터 갱신
+// 		address[i] = (start_p - curr);	//나중에 주소를 저장해야 하기에 지금 주소를 저장해둠
+		
+// 		memcpy ((start_p-curr), argv[i], argv_size);	//argv[i]의 데이터를 start 포인터에 저장 
+// 	}
+
+// 	//2. 마지막에 word-align = 0 으로 채운다 (8의 배수로 체운다)
+// 	size_t word_align_size = (start_p-curr) % 8;	//8의 배수로 채워야 하므로 나머지 만큼만 공백으로 채움
+// 	curr += word_align_size;
+// 	memset(start_p - curr, '\0', word_align_size);
+
+// 	//3. argv 배열의 마지막은 0으로 채운다. 
+// 	curr += 8;
+// 	memset(start_p - curr, 0, 8);
+
+// 	//3-1. argv의 주소값을 뒤에서부터 하나씩 넣는다
+// 	//	주소는 8바이트씩 넣는다. 
+// 	for (int j = argc-1; j != -1; j--)
+// 	{
+// 		size_t argv_size = 8;
+// 		curr += argv_size;
+		
+// 		memcpy ((start_p-curr), &address[j], argv_size);
+// 	}
+
+// 	//4. 마지막에 Return address 를 0으로 넣는다. 
+// 	curr += 8;
+// 	memset(start_p-curr, 0, 8);
+
+// 	//5. 저장했던 임시 포인터를 실제 rsp에 적용하고 나머지 포인터들도 세팅 한다. 
+// 	if_->rsp -= curr;
+// 	if_->R.rdi = argc;
+// 	if_->R.rsi = (if_->rsp)+8;
+
+
+
+// 	// 확인
+//     //hex_dump(if_->rsp - 8, if_->rsp - 8, USER_STACK - if_->rsp + 8, true);
+	
+
+// 	success = true;
+
+// done:
+// 	/* We arrive here whether the load is successful or not. */
+// 	file_close (file);
+// 	return success;
+// }
+
 
 
 /* Checks whether PHDR describes a valid, loadable segment in
