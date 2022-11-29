@@ -109,7 +109,7 @@ struct thread
 	int priority;                       /* Priority. */
 	int init_priority;
 
-	bool abc;
+	bool do_fork_error;
 	int64_t wakeup_tick; /* Shared between thread.c and synch.c. */
 	struct lock* wait_on_lock;
 	struct thread *my_parent;

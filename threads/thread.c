@@ -454,7 +454,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->my_file = NULL;
 	list_init(&t->child_list);
 	t->my_info = NULL;
-	t->abc = false;
+	t->do_fork_error = false;
 
 	for (int i = FDBASE; i < FDLIMIT; i++)
 	{

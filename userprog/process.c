@@ -85,25 +85,22 @@ initd (void *f_name) {
 tid_t
 process_fork (const char *name, struct intr_frame *if_) {
    /* Clone current thread to new thread.*/
-   struct semaphore dup_sema;
+   struct semaphore fork_sema;
    struct thread *p_thread = thread_current();
-   void *arr[3] = {p_thread, if_, &dup_sema};
+   void *arr[3] = {p_thread, if_, &fork_sema};
    tid_t child_pid;
 
-   sema_init(&dup_sema, 0);
+   sema_init(&fork_sema, 0);
 
    child_pid = thread_create(name, PRI_DEFAULT, __do_fork, arr);
-   // printf("내(%d)가 (%d)를 낳았다\n",p_thread->tid, child_pid);
    if (child_pid != TID_ERROR)
    {
-      sema_down(&dup_sema);
-      // 나의 childlist child-pid를 ㅊ자아서 그 애의 exit_code가 -1이면 -1를 리턴
-      if (p_thread -> abc == true){
+      sema_down(&fork_sema);
+      if (p_thread -> do_fork_error == true){
          return -1;
       }
       return child_pid;
    }else{
-      // printf("실패ㅜㅜ");
       return child_pid;
    }
    
@@ -153,23 +150,13 @@ duplicate_pte (uint64_t *pte, void *va, void *aux) {
  *       this function. */
 static void
 __do_fork (void **aux) {
-   // struct intr_frame if_;
    struct thread *parent = (struct thread *)aux[0];
    struct thread *current = thread_current();
    struct intr_frame if_ = current->tf;
    struct intr_frame *parent_if = (struct intr_frame *)aux[1];
-   struct semaphore *dup_sema = (struct semaphore *)aux[2];
+   struct semaphore *fork_sema = (struct semaphore *)aux[2];
    bool succ = true;
 
-
-   // current->my_parent = parent;
-   // struct child_info *my_info = (struct child_info *)malloc(sizeof(struct child_info));
-   // current->my_info = my_info;
-   // current->my_info->finished = false;
-   // current->my_info->c_tid = current->tid;
-   // current->my_info->c_exit_code = current->my_exit_code;
-   // sema_init(&current->my_info->c_sema, 0);
-   // list_push_back(&parent->child_list, &my_info->c_elem);
    /* TODO: somehow pass the parent_if. (i.e. process_fork()'s if_) */
 
    /* 1. Read the cpu context to local stack. */
@@ -211,13 +198,13 @@ __do_fork (void **aux) {
 
    /* Finally, switch to the newly created process. */
    if (succ){
-      sema_up(dup_sema);
+      sema_up(fork_sema);
       do_iret(&if_);
    }
 error:
-   sema_up(dup_sema);
+   sema_up(fork_sema);
    current->my_exit_code = -1;
-   parent->abc = true;
+   parent->do_fork_error = true;
    thread_exit();
 }
 
@@ -270,35 +257,6 @@ process_wait (tid_t child_tid) {
     * XXX:       implementing the process_wait. */
    int result;
    struct thread *curr = thread_current();
-   // if (curr->tid == 1)
-   // {
-   //    int b_ptr = ERROR_EXIT2;
-   //    while (b_ptr == ERROR_EXIT2)
-   //    {  enum intr_level old_level;
-   //       old_level = intr_disable ();
-   //       b_ptr = destruction_req_contains(child_tid);
-   //       intr_set_level(old_level);
-   //    }
-   // }else{
-   //    struct list_elem *child_elem = list_begin(&curr->child_list);
-   //    struct child_info *c_info;
-   //    while (child_elem != list_end(&curr->child_list))
-   //    {
-   //       c_info = list_entry(child_elem, struct child_info, c_elem);
-   //       if(c_info->c_tid == child_tid){
-   //          while(!c_info->finished){
-   //             sema_down(&c_info->c_sema);
-   //          }
-   //          result = c_info->c_exit_code;
-   //          list_remove(child_elem);
-   //          free(c_info);
-   //          c_info == NULL;
-   //          return result;
-   //       }
-   //       child_elem = list_next(child_elem);
-   //    }
-   // }
-
    struct list_elem *child_elem = list_begin(&curr->child_list);
    struct child_info *c_info;
    while (child_elem != list_end(&curr->child_list))
