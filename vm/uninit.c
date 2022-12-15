@@ -52,6 +52,9 @@ uninit_initialize (struct page *page, void *kva) {
 	void *aux = uninit->aux;
 
 	/* TODO: You may need to fix this function. */
+	/* 해당 페이지의 타입에 맞도록 페이지를 초기화합니다. */
+	/* 만약 해당 페이지의 segment가 load 되지 않은 상태면 lazy load해준다. */
+	/* init이 lazy_load_segment일때! */
 	return uninit->page_initializer (page, uninit->type, kva) &&
 		(init ? init (page, aux) : true);
 }

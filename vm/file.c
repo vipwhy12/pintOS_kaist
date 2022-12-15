@@ -23,9 +23,25 @@ vm_file_init (void) {
 bool
 file_backed_initializer (struct page *page, enum vm_type type, void *kva) {
 	/* Set up the handler */
+	// page->operations = &file_ops;
+	// struct file_page *file_page = &page->file;
+
+	/* PROJECT 03*/
+	struct uninit_page *uninit = &page->uninit;
+	// vm_initializer *init = uninit->init;
+	void *aux = uninit->aux;
+
+	/* Set up the handler */
 	page->operations = &file_ops;
 
+	memset(uninit, 0, sizeof(struct uninit_page));
+
+	struct lazy_load_info *info = (struct lazy_load_info *)aux;
 	struct file_page *file_page = &page->file;
+	file_page->file = info->file;
+	file_page->length = info->page_read_bytes;
+	file_page->offset = info->offset;
+	return true;
 }
 
 /* Swap in the page by read contents from the file. */
