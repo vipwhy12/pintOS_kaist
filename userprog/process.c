@@ -30,15 +30,31 @@
 #endif
 
 static void process_cleanup (void);
-static bool load (const char *file_name, struct intr_frame *if_);
+static bool const char *file_name, struct intr_frame *if_);
 static void initd (void *f_name);
 static void __do_fork (void **);
+
+
+
+
 
 /* General process initializer for initd and other process. */
 static void
 process_init (void) {
    struct thread *current = thread_current ();
 }
+
+
+struct file* process_get_file(int fd){
+	struct thread *curr = thread_current();
+	struct file* fd_file = curr->fd_table[fd];
+
+	if (fd_file)
+		return fd_file;
+	else
+		return NULL;
+}
+
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
  * The new thread may be scheduled (and may even exit)
@@ -225,6 +241,9 @@ process_exec (void *f_name) {
 
    /* We first kill the current context */
    process_cleanup();
+   #ifdef VM
+      supplemental_page_table_init(&thread_current()->spt);
+   #endif
 
    lock_acquire(&filesys_lock);
    /* And then load the binary */
@@ -419,7 +438,7 @@ struct ELF64_PHDR {
 #define ELF ELF64_hdr
 #define Phdr ELF64_PHDR
 
-static bool setup_stack (struct intr_frame *if_);
+
 static bool validate_segment (const struct Phdr *, struct file *);
 static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
       uint32_t read_bytes, uint32_t zero_bytes,
@@ -504,7 +523,7 @@ load (const char *file_name, struct intr_frame *if_) {
             goto done;
          case PT_LOAD:
             if (validate_segment (&phdr, file)) {
-               bool writable = (phdr.p_flags && PF_W) != 0;
+               bool writable = (phdr.p_flags & PF_W) != 0;
                uint64_t file_page = phdr.p_offset & ~PGMASK;
                uint64_t mem_page = phdr.p_vaddr & ~PGMASK;
                uint64_t page_offset = phdr.p_vaddr & PGMASK;
@@ -582,7 +601,7 @@ done:
    /* We arrive here whether the load is successful or not. */
    if (file){
       if (thread_current()->my_file){
-         file_close(thread_current()->my_file);
+         //file_close(thread_current()->my_file);
          thread_current()->my_file = NULL;
       }
       thread_current()->my_file = file;
@@ -745,6 +764,21 @@ lazy_load_segment (struct page *page, void *aux) {
    /* TODO: Load the segment from the file */
    /* TODO: This called when the first page fault occurs on address VA. */
    /* TODO: VA is available when calling this function. */
+   struct file *file = ((struct container*)aux)->file;
+   off_t offset = ((struct container*)aux)->offset;
+   size_t page_read_bytes = ((struct container*)aux)->page_read_bytes;
+   size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+   file_seek(file, offset);
+
+   if(file_read(file, page->frame->kva, page_read_bytes) != (int)page_read_bytes){
+      palloc_free_page(page->frame->kva);
+      return false;
+   }
+   /* 만약 1페이지 적게 받아왔다면 남는 데이터를 o으로 초기화한다. */
+   memset(page->frame->kva + page_read_bytes, 0, page_zero_bytes); 
+
+	return true;	
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -764,42 +798,69 @@ lazy_load_segment (struct page *page, void *aux) {
 static bool
 load_segment (struct file *file, off_t ofs, uint8_t *upage,
       uint32_t read_bytes, uint32_t zero_bytes, bool writable) {
-   ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
-   ASSERT (pg_ofs (upage) == 0);
-   ASSERT (ofs % PGSIZE == 0);
+	ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+	ASSERT (pg_ofs (upage) == 0);
+	ASSERT (ofs % PGSIZE == 0);
 
-   while (read_bytes > 0 || zero_bytes > 0) {
-      /* Do calculate how to fill this page.
-       * We will read PAGE_READ_BYTES bytes from FILE
-       * and zero the final PAGE_ZERO_BYTES bytes. */
-      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
-      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+	/* upage 주소부터 1페이지 단위씩 UNINIT 페이지를 만들어 프로세스의 spt에 넣는다(vm_alloc_page_with_initializer).
+	   이 때 각 페이지의 타입에 맞게 initializer도 맞춰준다. */
+	while (read_bytes > 0 || zero_bytes > 0) {
+		/* 1 Page보다 같거나 작은 메모리를 한 단위로 해서 읽어 온다.
+		   페이지보다 작은 메모리를 읽어올때 (페이지 - 메모리) 공간을 0으로 만들 것이다. */
+		size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* TODO: Set up aux to pass information to the lazy_load_segment. */
-      void *aux = NULL;
-      if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-               writable, lazy_load_segment, aux))
-         return false;
+		/* 새 UNINIT 페이지를 만들어서 현재 프로세스의 spt에 넣는다. 
+		   페이지에 해당하는 파일의 정보들을 container 구조체에 담아서 AUX로 넘겨준다.
+		   타입에 맞게 initializer를 설정해준다. */
+		struct container *container = (struct container *)malloc(sizeof(struct container));
+		container->file = file;
+		container->page_read_bytes = page_read_bytes;
+		container->offset = ofs;
 
-      /* Advance. */
-      read_bytes -= page_read_bytes;
-      zero_bytes -= page_zero_bytes;
-      upage += PGSIZE;
-   }
-   return true;
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage, 
+				writable, lazy_load_segment, container))
+			return false;
+		// page fault가 호출되면 페이지가 타입별로 초기화되고 lazy_load_segment()가 실행된다. 
+
+		/* Advance. */
+		read_bytes -= page_read_bytes;
+		zero_bytes -= page_zero_bytes;
+		upage += PGSIZE;
+		ofs += page_read_bytes;
+	}
+	return true;
 }
 
-/* Create a PAGE of stack at the USER_STACK. Return true on success. */
-static bool
-setup_stack (struct intr_frame *if_) {
-   bool success = false;
-   void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
-   /* TODO: Map the stack on stack_bottom and claim the page immediately.
-    * TODO: If success, set the rsp accordingly.
-    * TODO: You should mark the page is stack. */
-   /* TODO: Your code goes here */
+bool setup_stack (struct intr_frame *if_) {
+	bool success = false;
+	void *stack_bottom = (void *) (((uint8_t *) USER_STACK) - PGSIZE);
 
-   return success;
+	/* TODO: Map the stack on stack_bottom and claim the page immediately.
+	 * TODO: If success, set the rsp accordingly.
+	 * TODO: You should mark the page is stack. */
+	/* TODO: Your code goes here */
+	/* ANON 페이지로 만들 UNINIT 페이지를 stack_bottom에서 위로 PGSIZE만큼(1 PAGE) 만든다.
+     이 때 TYPE에 VM_MARKER_0 flag를 추가함으로써 이 페이지가 STACK에 있다는 것을 표시한다. */
+	if (vm_alloc_page(VM_ANON | VM_MARKER_0, stack_bottom, 1)) {
+		success = vm_claim_page(stack_bottom);
+
+		if (success){
+			if_->rsp = USER_STACK;
+			thread_current()->stack_bottom = stack_bottom;
+		}
+	}
+	return success;
 }
+/*   구현 후 스택의 모습
+		 ------------------------- <---- USER_STACK == if_->rsp
+	   |                       | 
+	   |       NEW PAGE        |
+	   |                       |
+	   |                       |
+	   ------------------------- <---- stack_bottom
+*/
+
+
 #endif /* VM */
