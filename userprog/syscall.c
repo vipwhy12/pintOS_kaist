@@ -222,107 +222,65 @@ int sys_exec_handler(char * cmd_line){
 
 void 
 sys_seek_handler(int fd, unsigned position){
-	struct thread *curr = thread_current ();
+	struct thread *curr = thread_create();
 	struct file **f_table = curr->fd_table;
-	if (fd < FDBASE || fd >= FDLIMIT || curr->fd_table[fd] == NULL) {
-		curr->my_exit_code = -1;
-		thread_exit();
-	}
-	struct file *f = f_table[fd];
-	lock_acquire(&filesys_lock);
-	file_seek(f, position);
-	lock_release(&filesys_lock);
-	
+	if(fd < FDBASE || fd >= FDLIMIT)
 }
 
-void
-* sys_mmap_handler (void *addr, size_t length, int writable, int fd, off_t offset){
-  if(offset % PGSIZE != 0 ) // 우리는 모든걸 PGSIZE에 맞춰서 사용하기 때문에 PGSIZE가 아닌 경우 return NULL
-    return NULL;
-
-  if (pg_round_down(addr) != addr || is_kernel_vaddr(addr) || addr == NULL || (long long)length <=0){
-  // pg_round_down(addr) != addr --> input된 addr이 page 주소가 맞는지 확인
-  // is_kernel_vaddr (addr) --> addr 가 kernel에 위치하고 있는지
-  // addr == NULL --> addr이 NULL 인지
-  // (long long) length <= 0 --> input 된 크기가 0 이상인지
-    return NULL;
-  }
-  
-  if (fd == 0 || fd == 1){
-    // fd 가 0이나 1이라는 의미는 STDIN, STDOUT 이라는 의미이니깐 들어오면 안되는 애가 들어온거 --> exit로 보내버림
-    exit_handler(-1);
-  }
-  
-  if(spt_find_page(&thread_current()->spt, addr)){
-    // addr 가 spt table에 존재하고 있는지 확인
-    return NULL;
-  }
-  
-  struct file * target = find_file_using_fd(fd); // fd가 존재하는거니깐 fd에 맞는 file을 찾고
-
-  if(target == NULL)
-    return NULL;
-  
-  void *ret = do_mmap(addr, length, writable, target, offset); 
-  //fd로 열린 파일의 오프셋 바이트부터 length 바이트 만큼을 프로세스의 가상주소공간의 주소 addr 에 매핑 합니다
-
-  return ret;
-}
 
 /* The main system call interface */
 void
 syscall_handler (struct intr_frame *f) { 
 	// TODO: Your implementation goes here.
-	#ifdef VM
-		thread_current()->rsp_stack = f->rsp;
-	#endif
-		int syscall_n = f->R.rax;
-		switch (syscall_n)
-		{
-		case SYS_HALT:
-			sys_halt_handler();
-			break;
-		case SYS_EXIT:
-			sys_exit_handler(f->R.rdi);
-			break;
-		case SYS_CREATE:
-			f->R.rax = sys_create_handler(f->R.rdi, f->R.rsi);
-			break;
-		case SYS_REMOVE:
-			f->R.rax = sys_remove_handler(f->R.rdi);
-			break;
-		case SYS_OPEN:
-			f->R.rax = sys_open_handler(f->R.rdi);
-			break;
-		case SYS_FILESIZE:
-			f->R.rax = sys_filesize_handler(f->R.rdi);
-			break;
-		case SYS_CLOSE:
-			f->R.rax = sys_close_handler(f->R.rdi);
-			break;
-		case SYS_READ:
-			check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 1);
-			f->R.rax = sys_read_handler(f->R.rdi, f->R.rsi, f->R.rdx);
-			break;
-		case SYS_WRITE:
-			check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 0);
-			f->R.rax = sys_write_handler(f->R.rdi, f->R.rsi, f->R.rdx);
-			break;
-		case SYS_FORK:
-			f->R.rax = sys_fork_handler(f->R.rdi, f);
-			break;
-		case SYS_WAIT:
-			f->R.rax = sys_wait_handler(f->R.rdi);
-			break;
-		case SYS_EXEC:
-			sys_exec_handler(f->R.rdi);
-			break;
-		case SYS_SEEK:
-			sys_seek_handler(f->R.rdi,f->R.rsi);
-			break;
-		case SYS_MMAP:
-			f->R.rax = sys_mmap_handler(f->R.rdi,f->R.rsi, f->R.rdx, f->R.r10, f->R.r8 );
-		default:
-			break;
-		}
+	
+	int syscall_n = f->R.rax;
+	
+	switch (syscall_n)
+	{
+	case SYS_HALT:
+		sys_halt_handler();
+		break;
+	case SYS_EXIT:
+		sys_exit_handler(f->R.rdi);
+		break;
+	case SYS_CREATE:
+		f->R.rax = sys_create_handler(f->R.rdi, f->R.rsi);
+		break;
+	case SYS_REMOVE:
+		f->R.rax = sys_remove_handler(f->R.rdi);
+		break;
+	case SYS_OPEN:
+		f->R.rax = sys_open_handler(f->R.rdi);
+		break;
+	case SYS_FILESIZE:
+		f->R.rax = sys_filesize_handler(f->R.rdi);
+		break;
+	case SYS_CLOSE:
+		f->R.rax = sys_close_handler(f->R.rdi);
+		break;
+	case SYS_READ:
+		check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 1);
+		f->R.rax = sys_read_handler(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
+	case SYS_WRITE:
+		check_valid_buffer(f->R.rsi, f->R.rdx, f->rsp, 0);
+		f->R.rax = sys_write_handler(f->R.rdi, f->R.rsi, f->R.rdx);
+		break;
+	case SYS_FORK:
+		f->R.rax = sys_fork_handler(f->R.rdi, f);
+		break;
+	case SYS_WAIT:
+		f->R.rax = sys_wait_handler(f->R.rdi);
+		break;
+	case SYS_EXEC:
+		sys_exec_handler(f->R.rdi);
+		break;
+	case SYS_SEEK:
+		sys_seek_handler(f->R.rdi,f->R.rsi);
+		break;
+	case SYS_TELL:
+		f->R.rax = sys_mmap_handler(f->R.rdi);
+	default:
+		break;
+	}
 }
